@@ -265,3 +265,75 @@ CREATE POLICY "Staff Update Curriculum MCQs"
 CREATE POLICY "Staff Delete Curriculum MCQs"
     ON public.curriculum_mcqs FOR DELETE
     USING (public.has_subject_access(subject));
+
+-- ====================================================================
+-- 7. PUBLIC Q&A & LESSON COMMENTS TABLE
+-- ====================================================================
+-- Enables guest-friendly commenting on lesson pages without mandatory sign-up,
+-- as well as verified staff replies with teacher badges.
+CREATE TABLE IF NOT EXISTS public.comments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    lesson_id TEXT NOT NULL REFERENCES public.lessons(id) ON DELETE CASCADE,
+    author_name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    parent_id UUID REFERENCES public.comments(id) ON DELETE CASCADE,
+    is_teacher BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_lesson_id ON public.comments(lesson_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_comments_parent_id ON public.comments(parent_id);
+
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+
+-- Public can freely read all comments and discussions on lessons
+CREATE POLICY "Public Read Comments"
+    ON public.comments FOR SELECT
+    USING (TRUE);
+
+-- Public guests and students can post comments without authentication
+CREATE POLICY "Public & Staff Insert Comments"
+    ON public.comments FOR INSERT
+    WITH CHECK (TRUE);
+
+-- Authenticated staff and Super Admin can moderate or delete comments
+CREATE POLICY "Staff Moderate Comments"
+    ON public.comments FOR DELETE
+    USING (public.is_super_admin() OR auth.uid() IS NOT NULL);
+
+-- ====================================================================
+-- 8. STAFF ACTIVITY & CONTENT UPDATE NOTIFICATIONS TABLE
+-- ====================================================================
+-- Tracks uploads, modifications, deletions, and staff replies in real time
+-- with dual-language Khmer & English descriptions.
+CREATE TABLE IF NOT EXISTS public.activity_notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    action_type TEXT NOT NULL CHECK (action_type IN ('video_upload', 'video_edit', 'video_delete', 'mcq_edit', 'comment_reply', 'comment_post')),
+    subject TEXT CHECK (subject IN ('math', 'physics', 'chemistry', 'biology', 'english')),
+    grade INTEGER CHECK (grade BETWEEN 7 AND 12),
+    lesson_id TEXT REFERENCES public.lessons(id) ON DELETE SET NULL,
+    actor_name TEXT NOT NULL,
+    actor_role TEXT NOT NULL,
+    title_km TEXT NOT NULL,
+    title_en TEXT NOT NULL,
+    message_km TEXT NOT NULL,
+    message_en TEXT NOT NULL,
+    details JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_notifications_time ON public.activity_notifications(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_notifications_subject ON public.activity_notifications(subject, created_at DESC);
+
+ALTER TABLE public.activity_notifications ENABLE ROW LEVEL SECURITY;
+
+-- Staff and public can view content update notifications
+CREATE POLICY "Public Read Activity Notifications"
+    ON public.activity_notifications FOR SELECT
+    USING (TRUE);
+
+-- Staff and system can record activity notifications
+CREATE POLICY "Staff Insert Activity Notifications"
+    ON public.activity_notifications FOR INSERT
+    WITH CHECK (TRUE);
+

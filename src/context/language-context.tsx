@@ -112,6 +112,51 @@ export interface Translations {
   cancel: string;
   delete: string;
   edit: string;
+  // Q&A / Public Comments
+  qaSectionTitle: string;
+  qaSubtitle: string;
+  guestName: string;
+  guestNamePlaceholder: string;
+  commentPlaceholder: string;
+  postComment: string;
+  posting: string;
+  reply: string;
+  cancelReply: string;
+  replyingTo: string;
+  teacherBadge: string;
+  studentBadge: string;
+  noCommentsYet: string;
+  beTheFirstComment: string;
+  commentsCount: string;
+  postingAsStaff: string;
+  deleteComment: string;
+  confirmDeleteComment: string;
+  pleaseEnterName: string;
+  pleaseEnterContent: string;
+  // Notifications & Activity Log
+  recentActivity: string;
+  activityLog: string;
+  activityLogSubtitle: string;
+  liveUpdatesBanner: string;
+  studentQaManagement: string;
+  qaManagementDesc: string;
+  allQuestions: string;
+  pendingReply: string;
+  answered: string;
+  sendReply: string;
+  replySentSuccess: string;
+  viewInLesson: string;
+  justNow: string;
+  minutesAgo: string;
+  hoursAgo: string;
+  daysAgo: string;
+  actionUploadVideo: string;
+  actionEditVideo: string;
+  actionDeleteVideo: string;
+  actionEditMcq: string;
+  actionCommentReply: string;
+  actionCommentPost: string;
+  allActions: string;
 }
 
 const TRANSLATIONS: Record<Language, Translations> = {
@@ -223,6 +268,51 @@ const TRANSLATIONS: Record<Language, Translations> = {
     cancel: 'បោះបង់',
     delete: 'លុបចេញ',
     edit: 'កែសម្រួល',
+    // Q&A / Public Comments
+    qaSectionTitle: 'សំណួរ-ចម្លើយ និងមតិពិភាក្សា',
+    qaSubtitle: 'សួរ ឬពិភាក្សាអំពីមេរៀននេះជាមួយលោកគ្រូ-អ្នកគ្រូ និងសិស្សានុសិស្សដទៃទៀត (មិនបាច់ចូលប្រព័ន្ធ)',
+    guestName: 'ឈ្មោះរបស់អ្នក',
+    guestNamePlaceholder: 'ឧ. សុខា, វណ្ណា, ឬ វិច្ឆិកា...',
+    commentPlaceholder: 'សរសេរសំណួរ ឬមតិយោបល់របស់អ្នកនៅទីនេះ...',
+    postComment: 'ផ្ញើសំណួរ / មតិ',
+    posting: 'កំពុងផ្ញើ...',
+    reply: 'ឆ្លើយតប',
+    cancelReply: 'បោះបង់ការឆ្លើយតប',
+    replyingTo: 'កំពុងឆ្លើយតបទៅកាន់',
+    teacherBadge: 'គ្រូបង្រៀន',
+    studentBadge: 'សិស្ស / សាធារណៈ',
+    noCommentsYet: 'មិនទាន់មានសំណួរ ឬមតិនៅឡើយទេ',
+    beTheFirstComment: 'ក្លាយជាអ្នកដំបូងដែលសួរសំណួរអំពីមេរៀននេះ!',
+    commentsCount: 'មតិយោបល់',
+    postingAsStaff: 'ឆ្លើយតបក្នុងនាមជាគ្រូបង្រៀនផ្លូវការ',
+    deleteComment: 'លុបមតិ',
+    confirmDeleteComment: 'តើអ្នកប្រាកដថាចង់លុបមតិនេះមែនទេ?',
+    pleaseEnterName: 'សូមបញ្ចូលឈ្មោះរបស់អ្នកជាមុនសិន',
+    pleaseEnterContent: 'សូមសរសេរខ្លឹមសារសំណួរ ឬមតិ',
+    // Notifications & Activity Log
+    recentActivity: 'សកម្មភាព និងការអាប់ដេតថ្មីៗ',
+    activityLog: 'កំណត់ត្រាការអាប់ដេតមាតិកា',
+    activityLogSubtitle: 'តាមដានរាល់ការបង្ហោះវីដេអូ កែសម្រួលឯកសារ និងការឆ្លើយតបរបស់គ្រូក្នុងពេលជាក់ស្តែង',
+    liveUpdatesBanner: 'ការអាប់ដេតមាតិកាថ្មីចុងក្រោយ',
+    studentQaManagement: 'គ្រប់គ្រងសំណួរសិស្ស (Q&A)',
+    qaManagementDesc: 'មើលសំណួរដែលសិស្សបានសួរ និងឆ្លើយតបដោយផ្ទាល់ក្នុងនាមជាគ្រូបង្រៀន',
+    allQuestions: 'សំណួរទាំងអស់',
+    pendingReply: 'មិនទាន់ឆ្លើយតប',
+    answered: 'បានឆ្លើយតបរួច',
+    sendReply: 'ផ្ញើការឆ្លើយតប',
+    replySentSuccess: 'បានឆ្លើយតបសំណួរជោគជ័យ!',
+    viewInLesson: 'ទៅកាន់មេរៀន',
+    justNow: 'អម្បាញ់មិញ',
+    minutesAgo: 'នាទីមុន',
+    hoursAgo: 'ម៉ោងមុន',
+    daysAgo: 'ថ្ងៃមុន',
+    actionUploadVideo: 'អាប់ឡូតវីដេអូថ្មី',
+    actionEditVideo: 'កែសម្រួលវីដេអូ',
+    actionDeleteVideo: 'លុបវីដេអូ',
+    actionEditMcq: 'កែសម្រួលលំហាត់ MCQ',
+    actionCommentReply: 'គ្រូឆ្លើយតបសំណួរ',
+    actionCommentPost: 'សំណួរសិស្សថ្មី',
+    allActions: 'គ្រប់សកម្មភាព',
   },
   en: {
     appName: 'MoEYS Academic & Student Hub',
@@ -332,6 +422,51 @@ const TRANSLATIONS: Record<Language, Translations> = {
     cancel: 'Cancel',
     delete: 'Delete',
     edit: 'Edit',
+    // Q&A / Public Comments
+    qaSectionTitle: 'Q&A & Lesson Discussion',
+    qaSubtitle: 'Ask questions or discuss concepts directly with teachers and fellow students (No login required)',
+    guestName: 'Your Name',
+    guestNamePlaceholder: 'e.g., Sokha, Vanna, or Alice...',
+    commentPlaceholder: 'Type your question or comment here...',
+    postComment: 'Post Comment / Question',
+    posting: 'Posting...',
+    reply: 'Reply',
+    cancelReply: 'Cancel Reply',
+    replyingTo: 'Replying to',
+    teacherBadge: 'Teacher',
+    studentBadge: 'Student / Guest',
+    noCommentsYet: 'No questions or comments yet',
+    beTheFirstComment: 'Be the first to ask a question or leave feedback about this lesson!',
+    commentsCount: 'Comments',
+    postingAsStaff: 'Replying with verified Teacher status',
+    deleteComment: 'Delete Comment',
+    confirmDeleteComment: 'Are you sure you want to delete this comment?',
+    pleaseEnterName: 'Please enter your name first',
+    pleaseEnterContent: 'Please enter your question or comment',
+    // Notifications & Activity Log
+    recentActivity: 'Recent Activities & Updates',
+    activityLog: 'Content Update History',
+    activityLogSubtitle: 'Real-time record of video uploads, handout revisions, and teacher replies',
+    liveUpdatesBanner: 'Latest Content Update',
+    studentQaManagement: 'Student Q&A Management',
+    qaManagementDesc: 'Review student questions across all lessons and reply directly with verified Teacher status',
+    allQuestions: 'All Questions',
+    pendingReply: 'Pending Reply',
+    answered: 'Answered',
+    sendReply: 'Send Reply',
+    replySentSuccess: 'Reply posted successfully!',
+    viewInLesson: 'View in Lesson',
+    justNow: 'Just now',
+    minutesAgo: 'mins ago',
+    hoursAgo: 'hours ago',
+    daysAgo: 'days ago',
+    actionUploadVideo: 'Uploaded Video',
+    actionEditVideo: 'Edited Video',
+    actionDeleteVideo: 'Deleted Video',
+    actionEditMcq: 'Edited MCQ',
+    actionCommentReply: 'Teacher Replied',
+    actionCommentPost: 'New Student Question',
+    allActions: 'All Actions',
   },
 };
 

@@ -27,6 +27,8 @@ import {
   Eye,
   CheckCircle2,
   RotateCcw,
+  MessageSquare,
+  Bell,
 } from 'lucide-react';
 import {
   SUBJECTS,
@@ -63,13 +65,17 @@ import { parseYouTubeUrl, parsePdfUrl } from '@/lib/storage-utils';
 import { LatexRenderer } from '@/components/latex-renderer';
 import { EditVideoModal } from '@/components/edit-video-modal';
 import { EditCurriculumMcqModal } from '@/components/edit-curriculum-mcq-modal';
+import { DashboardActivityBanner } from '@/components/dashboard-activity-banner';
+import { DashboardQaManagement } from '@/components/dashboard-qa-management';
+import { DashboardActivityLog } from '@/components/dashboard-activity-log';
+import { recordActivityNotification } from '@/lib/notifications-store';
 
 export default function StaffDashboardPage() {
   const router = useRouter();
   const { t, isKhmer } = useLanguage();
 
   const [currentStaff, setCurrentStaff] = useState<StaffAccount | null>(null);
-  const [activeTab, setActiveTab] = useState<'publish' | 'manage_content' | 'manage_videos' | 'manage_staff'>('manage_content');
+  const [activeTab, setActiveTab] = useState<'manage_content' | 'publish' | 'student_qa' | 'recent_activity' | 'manage_videos' | 'manage_staff'>('manage_content');
   const [videos, setVideos] = useState<VideoResourceItem[]>([]);
   const [staffList, setStaffList] = useState<StaffAccount[]>([]);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -279,7 +285,7 @@ export default function StaffDashboardPage() {
         questionEn: q.questionEn.trim() || q.questionKm.trim(),
       }));
 
-    addVideoResource({
+    const published = addVideoResource({
       lessonId: formLessonId,
       subject: formSubject,
       grade: formGrade,
@@ -293,6 +299,21 @@ export default function StaffDashboardPage() {
       pdfSourceType: 'gdrive',
       createdByEmail: currentStaff?.email,
       videoMcqs: validMcqs,
+    });
+
+    const staffName = currentStaff ? (isKhmer ? currentStaff.fullNameKm : currentStaff.fullNameEn) : 'Staff';
+    const subjMeta = SUBJECTS[formSubject];
+    recordActivityNotification({
+      actionType: 'video_upload',
+      subject: formSubject,
+      grade: formGrade,
+      lessonId: formLessonId,
+      actorName: staffName,
+      actorRole: currentStaff?.role || 'subject_lead',
+      titleKm: `បានអាប់ឡូតវីដេអូមុខវិជ្ជា${subjMeta.nameKm}ថ្មី (ថ្នាក់ទី ${formGrade})`,
+      titleEn: `New ${subjMeta.nameEn} Video uploaded (Grade ${formGrade})`,
+      messageKm: `បានផ្សាយវីដេអូ «${published.titleKm}» និងលំហាត់ស្ទង់ការយល់ដឹង`,
+      messageEn: `Published video "${published.titleEn}" and comprehension quiz`,
     });
 
     setVideos(getStoredVideos());
@@ -311,9 +332,25 @@ export default function StaffDashboardPage() {
   // Delete Video Lesson with Confirmation
   const handleDeleteVideo = (id: string) => {
     if (confirm(t('confirmDeleteDesc'))) {
+      const target = videos.find((v) => v.id === id);
       const ok = deleteVideoResource(id);
       if (ok) {
         setVideos(getStoredVideos());
+        if (target) {
+          const staffName = currentStaff ? (isKhmer ? currentStaff.fullNameKm : currentStaff.fullNameEn) : 'Staff';
+          recordActivityNotification({
+            actionType: 'video_delete',
+            subject: target.subject,
+            grade: target.grade,
+            lessonId: target.lessonId,
+            actorName: staffName,
+            actorRole: currentStaff?.role || 'subject_lead',
+            titleKm: `បានលុបមេរៀនវីដេអូ «${target.titleKm}»`,
+            titleEn: `Deleted video resource "${target.titleEn}"`,
+            messageKm: `បានដកចេញពីប្រព័ន្ធមេរៀនវីដេអូ និងឯកសារជំនួយស្មារតី`,
+            messageEn: `Removed video resource from curriculum hub`,
+          });
+        }
         setNotification({
           message: t('deletedSuccessfully'),
           type: 'success',
@@ -325,6 +362,19 @@ export default function StaffDashboardPage() {
   // Callback when a video resource is saved from modal
   const handleVideoSaved = (updated: VideoResourceItem) => {
     setVideos(getStoredVideos());
+    const staffName = currentStaff ? (isKhmer ? currentStaff.fullNameKm : currentStaff.fullNameEn) : 'Staff';
+    recordActivityNotification({
+      actionType: 'video_edit',
+      subject: updated.subject,
+      grade: updated.grade,
+      lessonId: updated.lessonId,
+      actorName: staffName,
+      actorRole: currentStaff?.role || 'subject_lead',
+      titleKm: `បានកែសម្រួលមេរៀនវីដេអូ «${updated.titleKm}»`,
+      titleEn: `Edited video resource "${updated.titleEn}"`,
+      messageKm: `បានធ្វើបច្ចុប្បន្នភាពតំណភ្ជាប់វីដេអូ ឯកសារ PDF ឬសំណួរ MCQ`,
+      messageEn: `Updated video URL, PDF handout link, or attached comprehension MCQs`,
+    });
     setNotification({
       message: t('updatedSuccessfully'),
       type: 'success',
@@ -333,6 +383,20 @@ export default function StaffDashboardPage() {
 
   // Callback when a curriculum MCQ is saved from modal
   const handleCurriculumMcqSaved = (updated: CurriculumMcq) => {
+    const staffName = currentStaff ? (isKhmer ? currentStaff.fullNameKm : currentStaff.fullNameEn) : 'Staff';
+    const subjMeta = SUBJECTS[updated.subject];
+    recordActivityNotification({
+      actionType: 'mcq_edit',
+      subject: updated.subject,
+      grade: updated.grade,
+      lessonId: updated.lessonId,
+      actorName: staffName,
+      actorRole: currentStaff?.role || 'subject_lead',
+      titleKm: `បានកែសម្រួលលំហាត់ស្តង់ដារ MoEYS សំណួរទី #${updated.questionNumber} (${subjMeta.nameKm})`,
+      titleEn: `Updated standard MoEYS MCQ Question #${updated.questionNumber} (${subjMeta.nameEn})`,
+      messageKm: `បានកែសម្រួលខ្លឹមសារសំណួរ ជម្រើសចម្លើយ និងដំណោះស្រាយលម្អិត`,
+      messageEn: `Updated question prompt, choices, and step-by-step solution`,
+    });
     setNotification({
       message: `${t('updatedSuccessfully')} (#${updated.questionNumber})`,
       type: 'success',
@@ -462,6 +526,9 @@ export default function StaffDashboardPage() {
           </div>
         </div>
 
+        {/* Real-time Content Update Notification Banner */}
+        <DashboardActivityBanner onViewActivityLog={() => setActiveTab('recent_activity')} />
+
         {/* Dashboard Navigation Tabs */}
         <div className="max-w-7xl mx-auto mt-6 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-4 overflow-x-auto">
           {/* 1. Manage & Edit Content Tab (Primary Management View) */}
@@ -490,7 +557,33 @@ export default function StaffDashboardPage() {
             <span>{isKhmer ? '➕ ផ្សាយមេរៀនវីដេអូ & MCQ ថ្មី' : '➕ Publish Video Lesson & MCQs'}</span>
           </button>
 
-          {/* 3. All Video Resources Catalog */}
+          {/* 3. Student Q&A Management Tab (Direct Staff Reply with Teacher Badge) */}
+          <button
+            onClick={() => setActiveTab('student_qa')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
+              activeTab === 'student_qa'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>{isKhmer ? '💬 សំណួរ & មតិសិស្ស (Q&A)' : '💬 Student Q&A'}</span>
+          </button>
+
+          {/* 4. Recent Activity Log Tab */}
+          <button
+            onClick={() => setActiveTab('recent_activity')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
+              activeTab === 'recent_activity'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            <span>{isKhmer ? '📋 កំណត់ត្រាសកម្មភាព' : '📋 Activity Log'}</span>
+          </button>
+
+          {/* 5. All Video Resources Catalog */}
           <button
             onClick={() => setActiveTab('manage_videos')}
             className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
@@ -503,7 +596,7 @@ export default function StaffDashboardPage() {
             <span>{isKhmer ? `🎬 បញ្ជីមេរៀនវីដេអូ (${videos.length})` : `🎬 Video Resources (${videos.length})`}</span>
           </button>
 
-          {/* 4. Manage Staff (Super Admin Only) */}
+          {/* 6. Manage Staff (Super Admin Only) */}
           {isSuperAdmin && (
             <button
               onClick={() => setActiveTab('manage_staff')}
@@ -1376,6 +1469,24 @@ export default function StaffDashboardPage() {
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 5: STUDENT Q&A / PUBLIC COMMENTS MANAGEMENT                */}
+      {/* ============================================================== */}
+      {activeTab === 'student_qa' && currentStaff && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+          <DashboardQaManagement currentStaff={currentStaff} />
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 6: REAL-TIME RECENT ACTIVITY LOG STREAM                    */}
+      {/* ============================================================== */}
+      {activeTab === 'recent_activity' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+          <DashboardActivityLog />
         </div>
       )}
 

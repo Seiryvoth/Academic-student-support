@@ -21,6 +21,7 @@ import { useLanguage } from '@/context/language-context';
 import { McqCard } from '@/components/mcq-card';
 import { PdfViewerModal } from '@/components/pdf-viewer-modal';
 import { LatexRenderer } from '@/components/latex-renderer';
+import { LessonComments } from '@/components/lesson-comments';
 
 export default function VideoLessonsPage() {
   const { t, isKhmer } = useLanguage();
@@ -333,6 +334,15 @@ export default function VideoLessonsPage() {
                     </div>
                   )}
                 </div>
+
+                {/* ============================================================== */}
+                {/* PUBLIC Q&A / COMMENT SECTION (GUEST-FRIENDLY & TEACHER BADGES) */}
+                {/* ============================================================== */}
+                <LessonComments
+                  lessonId={selectedLessonId}
+                  lessonTitleKm={activeVideo?.titleKm}
+                  lessonTitleEn={activeVideo?.titleEn}
+                />
               </>
             ) : (
               <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">

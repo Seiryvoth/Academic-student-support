@@ -31,6 +31,7 @@ import {
 import { useLanguage } from '@/context/language-context';
 import { McqCard } from '@/components/mcq-card';
 import { LatexRenderer } from '@/components/latex-renderer';
+import { LessonComments } from '@/components/lesson-comments';
 
 export default function PracticeMcqPage() {
   const { t, isKhmer } = useLanguage();
@@ -407,6 +408,13 @@ export default function PracticeMcqPage() {
                 </button>
               )}
             </div>
+
+            {/* Public Q&A / Comment Section */}
+            <LessonComments
+              lessonId={selectedLessonId}
+              lessonTitleKm={currentLesson?.titleKm}
+              lessonTitleEn={currentLesson?.titleEn}
+            />
           </div>
         )}
       </div>

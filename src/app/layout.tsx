@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { LanguageProvider } from '@/context/language-context';
 import { Navbar } from '@/components/navbar';
 import { InstallPwaBanner } from '@/components/install-pwa-banner';
+import { NotificationToast } from '@/components/notification-toast';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -55,9 +56,11 @@ export default function RootLayout({
             <Navbar />
             <main className="flex-1">{children}</main>
             <InstallPwaBanner />
+            <NotificationToast />
           </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>
   );
 }
+
