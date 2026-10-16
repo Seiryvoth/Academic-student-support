@@ -113,7 +113,7 @@ export const Navbar: React.FC = () => {
             {/* 2. Primary Navigation Buttons (Desktop) */}
             <nav className="hidden lg:flex items-center gap-1.5">
               {navLinks.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = pathname === item.href || (item.href === '/videos' && pathname === '/hub');
                 const IconComponent = item.icon;
                 return (
                   <Link
@@ -388,7 +388,7 @@ export const Navbar: React.FC = () => {
           <Link
             href="/videos"
             className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
-              pathname === '/videos'
+              pathname === '/videos' || pathname === '/hub'
                 ? 'text-blue-600 dark:text-blue-400 font-bold'
                 : 'text-slate-600 dark:text-slate-400 font-medium'
             }`}

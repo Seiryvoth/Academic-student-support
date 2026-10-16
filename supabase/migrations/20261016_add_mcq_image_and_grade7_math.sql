@@ -1,0 +1,92 @@
+-- ====================================================================
+-- MIGRATION: ADD MCQ IMAGE SUPPORT & GRADE 7 MATHEMATICS 14 LESSONS
+-- ====================================================================
+
+-- 1. Ensure question_image_url column exists in public.mcqs and public.curriculum_mcqs
+ALTER TABLE public.mcqs 
+ADD COLUMN IF NOT EXISTS question_image_url TEXT;
+
+ALTER TABLE public.curriculum_mcqs 
+ADD COLUMN IF NOT EXISTS question_image_url TEXT;
+
+-- 2. Clean and Insert Exact 14 Grade 7 Mathematics Lessons (Without "មេរៀនទីX" prefixes)
+INSERT INTO public.lessons (id, subject, grade, order_index, title_km, title_en, description_km, description_en)
+VALUES
+    ('math-g7-1', 'math', 7, 1, 
+     'ប្រមាណវិធីលើចំនួនគត់រ៉ឺឡាទីប ទសភាគ និងប្រភាគ', 
+     'Operations on Relative Integers, Decimals, and Fractions',
+     'និយមន័យ បន្ទាត់ចំនួន ប្រមាណវិធីបូក ដក គុណ ចែក ចំនួនគត់រ៉ឺឡាទីប ចំនួនទសភាគ និងប្រភាគ',
+     'Number line definitions, addition, subtraction, multiplication, and division on relative integers, decimals, and fractions.'),
+    ('math-g7-2', 'math', 7, 2, 
+     'ចំនួនបឋម តួចែករួមធំបំផុត និងពហុគុណរួមតូចបំផុត', 
+     'Prime Numbers, Greatest Common Divisor, and Least Common Multiple',
+     'ការបំបែកជាកត្តាបឋម វិធីស្វែងរកតួចែករួមធំបំផុត (GCD) និងពហុគុណរួមតូចបំផុត (LCM)',
+     'Prime factorization methods, finding the Greatest Common Divisor (GCD), and the Least Common Multiple (LCM).'),
+    ('math-g7-3', 'math', 7, 3, 
+     'ការេ និងឬសការេនៃចំនួនគត់', 
+     'Squares and Square Roots of Integers',
+     'និយមន័យការេ លក្ខណៈស្វ័យគុណពីរ វិធីគណនាឬសការេ និងការប៉ាន់ស្មានតម្លៃឬសការេ',
+     'Definitions of perfect squares, properties of power of two, square root calculations, and numerical estimation.'),
+    ('math-g7-4', 'math', 7, 4, 
+     'ផលធៀប សមាមាត្រ និងភាគរយ', 
+     'Ratios, Proportions, and Percentages',
+     'និយមន័យផលធៀប លក្ខណៈសមាមាត្រ និងការបំប្លែងរវាងប្រភាគ ទសភាគ និងភាគរយ (%)',
+     'Ratio definitions, proportionality properties, and conversions between fractions, decimals, and percentages.'),
+    ('math-g7-5', 'math', 7, 5, 
+     'ការអនុវត្តអត្រាការប្រាក់ និងការបញ្ចុះតម្លៃ', 
+     'Applications of Interest Rates and Discounts',
+     'ការគណនាការប្រាក់ទោល ប្រាក់ដើម អត្រាការប្រាក់ប្រចាំឆ្នាំ និងការគណនាការបញ្ចុះតម្លៃទំនិញ',
+     'Simple interest formulas, principal, annual percentage rates, profit/loss margins, and commercial discounts.'),
+    ('math-g7-6', 'math', 7, 6, 
+     'រង្វាស់ប្រវែង ម៉ាស ចំណុះ និងពេលវេលា', 
+     'Measurement of Length, Mass, Capacity, and Time',
+     'ប្រព័ន្ធរង្វាស់ខ្នាតអន្តរជាតិ (SI) ការបំប្លែងខ្នាតប្រវែង ម៉ាស ចំណុះមាឌ និងប្រមាណវិធីលើពេលវេលា',
+     'International System of Units (SI), unit conversions for length, mass, liquid capacity, and time arithmetic.'),
+    ('math-g7-7', 'math', 7, 7, 
+     'ធរណីមាត្រគ្រឹះ និងការសង់រូបក្នុងប្លង់', 
+     'Basic Geometry and Plane Figure Construction',
+     'ចំណុច បន្ទាត់ កន្លះបន្ទាត់ អង្កត់ មុំ បន្ទាត់កែង បន្ទាត់ស្រប និងការប្រើប្រាស់ដែកឈានសង់រូបធរណីមាត្រ',
+     'Points, lines, rays, segments, angles, perpendicular and parallel lines, compass-and-straightedge constructions.'),
+    ('math-g7-8', 'math', 7, 8, 
+     'បរិមាត្រ និងផ្ទៃក្រឡារង្វង់', 
+     'Perimeter and Area of Circles',
+     'ផ្ចិត កាំ អង្កត់ផ្ចិត ចំនួន $\pi \approx 3.14$ រូបមន្តបរិមាត្រ $C = 2\pi r$ និងផ្ទៃក្រឡារង្វង់ $S = \pi r^2$',
+     'Center, radius, diameter, constant $\pi \approx 3.14$, circumference formula $C = 2\pi r$, and area $S = \pi r^2$.'),
+    ('math-g7-9', 'math', 7, 9, 
+     'រូបធរណីមាត្រមានវិមាត្របី', 
+     'Three-Dimensional Geometric Figures',
+     'លក្ខណៈគូប ប្រលេពីប៉ែតកែង ព្រីស ពីរ៉ាមីត ស៊ីឡាំង និងការគណនាផ្ទៃខាង ផ្ទៃសរុប និងមាឌ',
+     'Properties of cubes, rectangular prisms, right prisms, pyramids, and cylinders; surface area and volume.'),
+    ('math-g7-10', 'math', 7, 10, 
+     'រូបធរណីមាត្រប៉ុនគ្នា និងភាពឆ្លុះក្នុងប្លង់', 
+     'Congruent Geometric Figures and Reflections in a Plane',
+     'និយមន័យរូបប៉ុនគ្នា ត្រីកោណប៉ុនគ្នា អ័ក្សឆ្លុះ ប្លង់ឆ្លុះ និងការឆ្លុះធៀបនឹងបន្ទាត់',
+     'Congruent figures, triangle congruence criteria, reflection symmetry, reflection axes, and line reflections.'),
+    ('math-g7-11', 'math', 7, 11, 
+     'ការប្រមូលទិន្នន័យ និងតារាង-ក្រាបស្ថិតិ', 
+     'Data Collection, Statistical Tables, and Graphs',
+     'វិធីសាស្ត្រប្រមូលទិន្នន័យ តារាងប្រេកង់ ក្រាបបង្គោល ក្រាបបន្ទាត់ និងដ្យាក្រាមរង្វង់ (Pie Chart)',
+     'Data collection methods, frequency distribution tables, bar charts, line graphs, and pie charts.'),
+    ('math-g7-12', 'math', 7, 12, 
+     'សញ្ញាណគ្រឹះនៃប្រូបាប', 
+     'Basic Concepts of Probability',
+     'ពិសោធន៍ចៃដន្យ លំហសំណាក ព្រឹត្តិការណ៍ និងរូបមន្តគណនាប្រូបាប $P(A) = \frac{n(A)}{n(S)}$',
+     'Random experiments, sample spaces, favorable outcomes, events, and probability formula $P(A) = \frac{n(A)}{n(S)}$.'),
+    ('math-g7-13', 'math', 7, 13, 
+     'កន្សោមពីជគណិត និងសមីការដឺក្រេទី១ មានមួយអញ្ញាត', 
+     'Algebraic Expressions and Linear Equations with One Variable',
+     'អថេរ មេគុណ ការបូកដកតួដូចគ្នា វិធានដោះស្រាយសមីការ $ax + b = c$ ($a \neq 0$) និងការដោះស្រាយចំណោទ',
+     'Variables, coefficients, combining like terms, solving linear equations $ax + b = c$, and algebraic word problems.'),
+    ('math-g7-14', 'math', 7, 14, 
+     'វិចារគណិតវិទ្យា', 
+     'Mathematical Reasoning',
+     'វិចារអនុមានរួម វិចារអនុមានញែក ការបង្កើតសម្មតិកម្ម ការទាញរកហេតុផលត្រឹមត្រូវ និងការបញ្ជាក់អំណះអំណាង',
+     'Inductive and deductive reasoning, hypothesis formation, logical inference, counterexamples, and proofs.')
+ON CONFLICT (id) DO UPDATE SET
+    subject = EXCLUDED.subject,
+    grade = EXCLUDED.grade,
+    order_index = EXCLUDED.order_index,
+    title_km = EXCLUDED.title_km,
+    title_en = EXCLUDED.title_en,
+    description_km = EXCLUDED.description_km,
+    description_en = EXCLUDED.description_en;

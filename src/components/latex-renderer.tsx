@@ -20,7 +20,7 @@ export const LatexRenderer: React.FC<LatexRendererProps> = ({
   inline = false,
 }) => {
   const segments = useMemo(() => {
-    if (!content) return [];
+    if (!content || typeof content !== 'string') return [];
 
     const result: Segment[] = [];
     let remaining = content;

@@ -28,6 +28,7 @@ export interface McqCardProps {
   explanationEn: string;
   onAnswerSelected?: (isCorrect: boolean, selectedChoice: McqChoice) => void;
   selectedOption?: McqChoice | null;
+  questionImageUrl?: string | null;
 }
 
 export const McqCard: React.FC<McqCardProps> = ({
@@ -44,6 +45,7 @@ export const McqCard: React.FC<McqCardProps> = ({
   explanationEn,
   onAnswerSelected,
   selectedOption: externalSelectedOption,
+  questionImageUrl,
 }) => {
   const { isKhmer, t } = useLanguage();
   const [internalSelected, setInternalSelected] = useState<McqChoice | null>(null);
@@ -55,9 +57,9 @@ export const McqCard: React.FC<McqCardProps> = ({
 
   const choices: McqChoice[] = ['A', 'B', 'C', 'D', 'E'];
 
-  const questionText = isKhmer ? questionKm : questionEn;
-  const hintText = isKhmer ? hintKm : hintEn;
-  const explanationText = isKhmer ? explanationKm : explanationEn;
+  const questionText = (isKhmer ? questionKm : questionEn) || questionKm || questionEn || '';
+  const hintText = (isKhmer ? hintKm : hintEn) || hintKm || hintEn || '';
+  const explanationText = (isKhmer ? explanationKm : explanationEn) || explanationKm || explanationEn || '';
 
   const handleSelect = (choice: McqChoice) => {
     if (isAnswered) return; // Prevent changing after selection
@@ -123,14 +125,31 @@ export const McqCard: React.FC<McqCardProps> = ({
       )}
 
       {/* Question Text with KaTeX support */}
-      <div className="text-base sm:text-lg font-medium text-slate-900 dark:text-slate-100 leading-relaxed mb-6">
+      <div className="text-base sm:text-lg font-medium text-slate-900 dark:text-slate-100 leading-relaxed mb-4">
         <LatexRenderer content={questionText} />
       </div>
 
-      {/* Universal 5 Choices (A, B, C, D, E) */}
+      {/* Visual Diagram / Geometric Shape / Graph Image */}
+      {questionImageUrl && (
+        <div className="mb-6 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40 p-3 sm:p-4 flex flex-col items-center justify-center shadow-xs">
+          <img
+            src={questionImageUrl}
+            alt={isKhmer ? 'រូបគំនូរ ឬក្រាបសម្រាប់សំណួរ' : 'Question visual diagram or geometry figure'}
+            className="max-h-72 w-auto max-w-full object-contain rounded-xl"
+            loading="lazy"
+          />
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 font-medium">
+            {isKhmer ? '📊 រូបគំនូរតំណាង ឬក្រាបជំនួយស្មារតីសម្រាប់សំណួរ' : '📊 Visual representation / figure for this question'}
+          </span>
+        </div>
+      )}
+
+      {/* Universal 4 or 5 Choices (A, B, C, D, E) */}
       <div className="space-y-3 mb-6">
         {choices.map((choice, idx) => {
-          const optionText = isKhmer ? optionsKm[idx] : optionsEn[idx];
+          const optionText = (isKhmer ? optionsKm?.[idx] : optionsEn?.[idx]) || optionsKm?.[idx] || optionsEn?.[idx] || '';
+          if (!optionText || optionText.trim() === '') return null;
+
           const isSelected = selectedChoice === choice;
           const isCorrect = choice === correctAnswer;
 

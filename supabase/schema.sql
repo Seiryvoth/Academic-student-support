@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS public.curriculum_mcqs (
     hint_en TEXT NOT NULL,
     explanation_km TEXT NOT NULL,
     explanation_en TEXT NOT NULL,
+    question_image_url TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT unique_curriculum_mcq UNIQUE (lesson_id, question_number)
 );
@@ -109,6 +110,50 @@ CREATE TABLE IF NOT EXISTS public.video_mcqs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_video_mcqs_video ON public.video_mcqs(video_id, question_number);
+
+-- 7. CMS UNIFIED RELATIONAL ARCHITECTURE: VIDEOS, ATTACHMENTS & UNIFIED MCQS
+CREATE TABLE IF NOT EXISTS public.videos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    lesson_id TEXT NOT NULL REFERENCES public.lessons(id) ON DELETE CASCADE,
+    title_km TEXT NOT NULL,
+    title_en TEXT NOT NULL,
+    video_url TEXT NOT NULL,
+    description TEXT,
+    order_index INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_videos_lesson ON public.videos(lesson_id, order_index);
+
+CREATE TABLE IF NOT EXISTS public.video_attachments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    video_id UUID NOT NULL REFERENCES public.videos(id) ON DELETE CASCADE,
+    file_url TEXT NOT NULL,
+    title TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_video_attachments_video ON public.video_attachments(video_id);
+
+CREATE TABLE IF NOT EXISTS public.mcqs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    grade_level INTEGER NOT NULL CHECK (grade_level BETWEEN 7 AND 12),
+    subject_id TEXT NOT NULL CHECK (subject_id IN ('math', 'physics', 'chemistry', 'biology', 'english')),
+    lesson_id TEXT NOT NULL REFERENCES public.lessons(id) ON DELETE CASCADE,
+    video_id UUID REFERENCES public.videos(id) ON DELETE CASCADE,
+    question_km TEXT NOT NULL,
+    question_en TEXT NOT NULL,
+    options JSONB NOT NULL,
+    correct_answer TEXT NOT NULL,
+    explanation TEXT,
+    hint_km TEXT,
+    hint_en TEXT,
+    explanation_km TEXT,
+    explanation_en TEXT,
+    difficulty TEXT NOT NULL DEFAULT 'medium' CHECK (difficulty IN ('basic', 'medium', 'advanced')),
+    question_image_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_mcqs_lesson ON public.mcqs(subject_id, grade_level, lesson_id);
+CREATE INDEX IF NOT EXISTS idx_mcqs_video ON public.mcqs(video_id);
 
 -- ====================================================================
 -- RLS FUNCTIONS & POLICIES

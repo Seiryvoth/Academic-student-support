@@ -1,6 +1,6 @@
 'use client';
 
-import { SubjectId, GradeLevel, getAllLessons, getLessonById } from './curriculum-data';
+import { SubjectId, GradeLevel, LessonItem, getAllLessons, getLessonById, STORAGE_KEY_CUSTOM_LESSONS, getCustomLessonsFromStorage, saveCustomLessonsToStorage } from './curriculum-data';
 import { parseYouTubeUrl, parsePdfUrl } from './storage-utils';
 import { McqChoice } from './curriculum-mcqs-generator';
 
@@ -16,6 +16,7 @@ export interface VideoMcqItem {
   hintEn: string;
   explanationKm: string;
   explanationEn: string;
+  questionImageUrl?: string;
 }
 
 export interface VideoResourceItem {
@@ -34,6 +35,7 @@ export interface VideoResourceItem {
   createdAt: string;
   createdByEmail?: string;
   videoMcqs: VideoMcqItem[];
+  orderIndex?: number;
 }
 
 export interface StaffAccount {
@@ -41,8 +43,8 @@ export interface StaffAccount {
   email: string;
   fullNameKm: string;
   fullNameEn: string;
-  role: 'super_admin' | 'subject_lead';
-  subjectAssigned: SubjectId | null; // null for super_admin
+  role: 'super_admin' | 'subject_lead' | 'student';
+  subjectAssigned: SubjectId | null; // null for super_admin and student
   isActive: boolean;
   createdAt: string;
 }
@@ -113,6 +115,88 @@ export const INITIAL_STAFF_ACCOUNTS: StaffAccount[] = [
 
 // Initial pre-seeded video lessons showcasing hybrid YouTube + Google Drive PDF architecture
 export const INITIAL_VIDEO_RESOURCES: VideoResourceItem[] = [
+  {
+    id: 'video-math-7-1',
+    lessonId: 'math-g7-1',
+    subject: 'math',
+    grade: 7,
+    titleKm: 'ប្រមាណវិធីលើចំនួនគត់រ៉ឺឡាទីប ទសភាគ និងប្រភាគ (មេរៀនសង្ខេប)',
+    titleEn: 'Operations on Relative Integers, Decimals, and Fractions (Summary Lecture)',
+    descriptionKm: 'ការពន្យល់លម្អិតអំពីបន្ទាត់ចំនួន វិធានសញ្ញាបូក ដក គុណ ចែក ចំនួនគត់រ៉ឺឡាទីប និងវិធីគណនាប្រភាគយ៉ាងងាយស្រួល។',
+    descriptionEn: 'Comprehensive breakdown of number lines, sign rules for integer arithmetic, and fraction operations.',
+    youtubeUrl: 'https://www.youtube.com/watch?v=kYv9yYyXy1A',
+    youtubeVideoId: 'kYv9yYyXy1A',
+    pdfUrl: 'https://drive.google.com/file/d/1g7math001samplepdf/view?usp=sharing',
+    pdfSourceType: 'gdrive',
+    createdAt: '2026-02-15T08:00:00Z',
+    createdByEmail: 'math@moeys.gov.kh',
+    videoMcqs: [],
+    orderIndex: 1,
+  },
+  {
+    id: 'video-math-8-1',
+    lessonId: 'math-g8-1',
+    subject: 'math',
+    grade: 8,
+    titleKm: 'ចំនួនសនិទាន និងទសភាគខួប (មេរៀនសង្ខេប MoEYS)',
+    titleEn: 'Rational Numbers and Recurring Decimals (Summary Lecture)',
+    descriptionKm: 'ការពន្យល់លម្អិតអំពីការបំប្លែងប្រភាគទៅជាទសភាគខួប វិធានគុណចែកចំនួនសនិទាន និងការប្រៀបធៀបលើបន្ទាត់ចំនួន។',
+    descriptionEn: 'In-depth explanation of converting fractions to recurring decimals, operations on rational numbers, and number line ordering.',
+    youtubeUrl: 'https://www.youtube.com/watch?v=kYv9yYyXy1A',
+    youtubeVideoId: 'kYv9yYyXy1A',
+    pdfUrl: 'https://drive.google.com/file/d/1g8math001samplepdf/view?usp=sharing',
+    pdfSourceType: 'gdrive',
+    createdAt: '2026-02-16T08:00:00Z',
+    createdByEmail: 'math@moeys.gov.kh',
+    videoMcqs: [
+      {
+        id: 'vmcq-m8-1',
+        questionNumber: 1,
+        questionKm: 'យោងតាមវីដេអូបង្រៀន តើប្រភាគ $\\frac{1}{3}$ សរសេរជាទសភាគខួបស្មើនឹងប៉ុន្មាន?',
+        questionEn: 'According to the video lecture, what is the recurring decimal form of $\\frac{1}{3}$?',
+        optionsKm: ['$0.33$', '$0.\\bar{3}$', '$0.30$', '$0.03$', ''],
+        optionsEn: ['$0.33$', '$0.\\bar{3}$', '$0.30$', '$0.03$', ''],
+        correctAnswer: 'B',
+        hintKm: 'លេខ $3$ កើតឡើងដដែលៗឥតកំណត់ ($0.333...$)។',
+        hintEn: 'Digit 3 repeats infinitely ($0.333...$).',
+        explanationKm: '$\\frac{1}{3} = 0.333... = 0.\\bar{3}$។ ចម្លើយត្រឹមត្រូវគឺ B។',
+        explanationEn: '$\\frac{1}{3} = 0.\\bar{3}$. Option B is correct.',
+      },
+    ],
+    orderIndex: 1,
+  },
+  {
+    id: 'video-math-9-1',
+    lessonId: 'math-g9-1',
+    subject: 'math',
+    grade: 9,
+    titleKm: 'ចំនួនអសនិទាន និងរ៉ាឌីកាល់ (មេរៀនសង្ខេប MoEYS)',
+    titleEn: 'Irrational Numbers and Radicals (Summary Lecture)',
+    descriptionKm: 'ការពន្យល់លម្អិតអំពីនិយមន័យចំនួនអសនិទាន ទសភាគមិនខួបមិនចេះចប់ វិធានសម្រួលរ៉ាឌីកាល់ និងការបំបាត់រ៉ាឌីកាល់ពីភាគបែង។',
+    descriptionEn: 'In-depth explanation of irrational numbers, non-terminating non-repeating decimals, radical operations, and denominator rationalization.',
+    youtubeUrl: 'https://www.youtube.com/watch?v=kYv9yYyXy1A',
+    youtubeVideoId: 'kYv9yYyXy1A',
+    pdfUrl: 'https://drive.google.com/file/d/1g9math001samplepdf/view?usp=sharing',
+    pdfSourceType: 'gdrive',
+    createdAt: '2026-02-17T08:00:00Z',
+    createdByEmail: 'math@moeys.gov.kh',
+    videoMcqs: [
+      {
+        id: 'vmcq-m9-1',
+        questionNumber: 1,
+        questionKm: 'យោងតាមវីដេអូបង្រៀន តើចំនួនណាជាចំនួនអសនិទាន?',
+        questionEn: 'According to the video lecture, which of the following is an irrational number?',
+        optionsKm: ['$\\frac{22}{7}$', '$\\sqrt{2}$', '$3.14$', '$\\sqrt{16}$', ''],
+        optionsEn: ['$\\frac{22}{7}$', '$\\sqrt{2}$', '$3.14$', '$\\sqrt{16}$', ''],
+        correctAnswer: 'B',
+        hintKm: 'ចំនួនអសនិទានជាទសភាគមិនខួបមិនចេះចប់។',
+        hintEn: 'An irrational number has a non-repeating, non-terminating decimal expansion.',
+        explanationKm: '$\\sqrt{2} \\approx 1.4142...$ ជាចំនួនអសនិទាន។ ចម្លើយត្រឹមត្រូវគឺ B។',
+        explanationEn: '$\\sqrt{2} \\approx 1.4142...$ is irrational. Option B is correct.',
+      },
+    ],
+    orderIndex: 1,
+  },
   {
     id: 'video-math-12-1',
     lessonId: 'math-g12-1',
@@ -378,8 +462,14 @@ export function addVideoResource(item: Omit<VideoResourceItem, 'id' | 'createdAt
   const parsedYoutube = parseYouTubeUrl(item.youtubeUrl);
   const parsedPdf = parsePdfUrl(item.pdfUrl);
 
+  const existingForLesson = current.filter((v) => v.lessonId === item.lessonId);
+  const nextOrderIndex = item.orderIndex !== undefined
+    ? item.orderIndex
+    : (existingForLesson.length > 0 ? Math.max(...existingForLesson.map((v) => v.orderIndex || 1)) + 1 : 1);
+
   const newItem: VideoResourceItem = {
     ...item,
+    orderIndex: nextOrderIndex,
     id: `video-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     youtubeVideoId: parsedYoutube.videoId || '5PcpBw5Hbwo',
     pdfSourceType: parsedPdf.sourceType === 'gdrive' ? 'gdrive' : 'external',
@@ -406,6 +496,7 @@ export function addVideoResource(item: Omit<VideoResourceItem, 'id' | 'createdAt
           youtube_video_id: newItem.youtubeVideoId,
           pdf_url: newItem.pdfUrl,
           pdf_source_type: newItem.pdfSourceType,
+          order_index: newItem.orderIndex,
         });
 
         if (newItem.videoMcqs && newItem.videoMcqs.length > 0) {
@@ -431,6 +522,49 @@ export function addVideoResource(item: Omit<VideoResourceItem, 'id' | 'createdAt
   }
 
   return newItem;
+}
+
+// Get all videos for a lesson sorted by playlist order
+export function getVideosForLesson(lessonId: string): VideoResourceItem[] {
+  const current = getStoredVideos();
+  return current
+    .filter((v) => v.lessonId === lessonId)
+    .sort((a, b) => (a.orderIndex || 1) - (b.orderIndex || 1));
+}
+
+// Reorder videos in a lesson playlist
+export function reorderLessonVideos(lessonId: string, orderedVideoIds: string[]): VideoResourceItem[] {
+  const current = getStoredVideos();
+  const updated = current.map((v) => {
+    if (v.lessonId === lessonId) {
+      const idx = orderedVideoIds.indexOf(v.id);
+      if (idx !== -1) {
+        return { ...v, orderIndex: idx + 1 };
+      }
+    }
+    return v;
+  });
+  saveStoredVideos(updated);
+
+  // Sync to Supabase
+  try {
+    import('./supabase').then(async ({ isSupabaseConfigured, supabase }) => {
+      if (isSupabaseConfigured && supabase) {
+        for (let i = 0; i < orderedVideoIds.length; i++) {
+          await supabase
+            .from('video_resources')
+            .update({ order_index: i + 1, updated_at: new Date().toISOString() })
+            .eq('id', orderedVideoIds[i]);
+        }
+      }
+    });
+  } catch {
+    // Local storage fallback
+  }
+
+  return updated
+    .filter((v) => v.lessonId === lessonId)
+    .sort((a, b) => (a.orderIndex || 1) - (b.orderIndex || 1));
 }
 
 export function getVideoResourceById(id: string): VideoResourceItem | undefined {
@@ -479,6 +613,7 @@ export function updateVideoResource(id: string, updates: Partial<VideoResourceIt
             youtube_video_id: updatedItem.youtubeVideoId,
             pdf_url: updatedItem.pdfUrl,
             pdf_source_type: updatedItem.pdfSourceType,
+            order_index: updatedItem.orderIndex,
             updated_at: new Date().toISOString(),
           })
           .eq('id', updatedItem.id);
@@ -558,18 +693,21 @@ export function saveStoredStaff(staff: StaffAccount[]): void {
   }
 }
 
+let memoryStaffSession: StaffAccount | null = null;
+
 export function getCurrentStaffSession(): StaffAccount | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') return memoryStaffSession;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CURRENT_STAFF);
-    if (!raw) return null;
+    if (!raw) return memoryStaffSession;
     return JSON.parse(raw);
   } catch {
-    return null;
+    return memoryStaffSession;
   }
 }
 
 export function setCurrentStaffSession(account: StaffAccount | null): void {
+  memoryStaffSession = account;
   if (typeof window === 'undefined') return;
   try {
     if (account) {
@@ -577,7 +715,206 @@ export function setCurrentStaffSession(account: StaffAccount | null): void {
     } else {
       localStorage.removeItem(STORAGE_KEY_CURRENT_STAFF);
     }
+    window.dispatchEvent(new Event('moeys_staff_auth_changed'));
+    window.dispatchEvent(new Event('storage'));
   } catch (err) {
     console.error('Error setting staff session:', err);
   }
 }
+
+// ============================================================================
+// CUSTOM LESSON MANAGEMENT (Inline Quick-Add Lesson + Supabase Integration)
+// ============================================================================
+
+export function getStoredCustomLessons(): LessonItem[] {
+  return getCustomLessonsFromStorage();
+}
+
+export function saveStoredCustomLessons(lessons: LessonItem[]): void {
+  saveCustomLessonsToStorage(lessons);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('moeys-lessons-updated'));
+    window.dispatchEvent(new Event('storage'));
+  }
+}
+
+export async function addCustomLesson(
+  lessonData: Omit<LessonItem, 'id'> & { customId?: string }
+): Promise<LessonItem> {
+  const current = getStoredCustomLessons();
+  const id = lessonData.customId || `${lessonData.subject}-g${lessonData.grade}-custom-${Date.now().toString(36)}`;
+  
+  const newLesson: LessonItem = {
+    id,
+    subject: lessonData.subject,
+    grade: lessonData.grade,
+    orderIndex: lessonData.orderIndex,
+    titleKm: lessonData.titleKm.trim(),
+    titleEn: lessonData.titleEn.trim(),
+    descriptionKm: lessonData.descriptionKm?.trim() || 'មេរៀនបន្ថែមតាមកម្មវិធីសិក្សា',
+    descriptionEn: lessonData.descriptionEn?.trim() || 'Custom curriculum lesson resource',
+  };
+
+  const updated = [...current.filter((l) => l.id !== id), newLesson];
+  saveStoredCustomLessons(updated);
+
+  // Attempt Supabase sync
+  try {
+    const { isSupabaseConfigured, supabase } = await import('./supabase');
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from('lessons').upsert(
+        {
+          id: newLesson.id,
+          subject: newLesson.subject,
+          grade: newLesson.grade,
+          subject_id: newLesson.subject,
+          grade_level: newLesson.grade,
+          order_index: newLesson.orderIndex,
+          title_km: newLesson.titleKm,
+          title_en: newLesson.titleEn,
+          description_km: newLesson.descriptionKm,
+          description_en: newLesson.descriptionEn,
+        },
+        { onConflict: 'id' }
+      );
+    }
+  } catch (err) {
+    console.warn('Supabase lessons sync failed, saved to local cache:', err);
+  }
+
+  return newLesson;
+}
+
+export async function deleteCustomLesson(id: string): Promise<boolean> {
+  const current = getStoredCustomLessons();
+  const filtered = current.filter((l) => l.id !== id);
+  if (filtered.length !== current.length) {
+    saveStoredCustomLessons(filtered);
+
+    try {
+      const { isSupabaseConfigured, supabase } = await import('./supabase');
+      if (isSupabaseConfigured && supabase) {
+        await supabase.from('lessons').delete().eq('id', id);
+      }
+    } catch {
+      // Local storage fallback
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * RBAC Helper: Checks if the current staff member has permission to edit/delete
+ * in the selected subject (Super Admins can manage all, Subject Leads can manage their assigned subject).
+ */
+export function canManageSubject(staff: StaffAccount | null, subject: SubjectId): boolean {
+  if (!staff || !staff.isActive) return false;
+  if (staff.role === 'super_admin') return true;
+  if (staff.role === 'subject_lead') {
+    return !staff.subjectAssigned || staff.subjectAssigned === subject;
+  }
+  return false;
+}
+
+/**
+ * Updates a lesson's bilingual title and persists to local storage and Supabase
+ */
+export async function updateLessonTitle(
+  lessonId: string,
+  titleKm: string,
+  titleEn: string
+): Promise<LessonItem | null> {
+  const staff = getCurrentStaffSession();
+  const all = getAllLessons();
+  const target = all.find((l) => l.id === lessonId);
+  if (!target) return null;
+
+  // Strict backend RBAC verification: 403 Forbidden for unauthorized callers
+  if (!canManageSubject(staff, target.subject)) {
+    throw new Error('403_FORBIDDEN');
+  }
+
+  const updated: LessonItem = {
+    ...target,
+    titleKm: titleKm.trim(),
+    titleEn: titleEn.trim(),
+  };
+
+  // Upsert into custom lessons storage so getLessonsBySubjectAndGrade displays the updated title
+  const currentCustoms = getStoredCustomLessons();
+  const filtered = currentCustoms.filter((l) => l.id !== lessonId);
+  saveStoredCustomLessons([...filtered, updated]);
+
+  // Attempt Supabase sync
+  try {
+    const { isSupabaseConfigured, supabase } = await import('./supabase');
+    if (isSupabaseConfigured && supabase) {
+      await supabase
+        .from('lessons')
+        .update({
+          title_km: updated.titleKm,
+          title_en: updated.titleEn,
+        })
+        .eq('id', lessonId);
+    }
+  } catch (err) {
+    console.warn('Supabase lesson update notice:', err);
+  }
+
+  // Notify UI
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('moeys-lessons-updated'));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  return updated;
+}
+
+/**
+ * Cascade deletes a lesson, removing its associated videos, video attachments, and MCQs
+ * both in Supabase (via foreign key ON DELETE CASCADE) and local state.
+ */
+export async function deleteLessonCascade(lessonId: string): Promise<boolean> {
+  const staff = getCurrentStaffSession();
+  const all = getAllLessons();
+  const target = all.find((l) => l.id === lessonId);
+
+  // Strict backend RBAC verification: 403 Forbidden for unauthorized callers
+  if (target && !canManageSubject(staff, target.subject)) {
+    throw new Error('403_FORBIDDEN');
+  }
+
+  const { addDeletedLessonId } = await import('./curriculum-data');
+  const { deleteLessonCascadeFromStore } = await import('./cms-unified-store');
+
+  // 1. Mark as deleted in curriculum data so it disappears from UI
+  addDeletedLessonId(lessonId);
+
+  // 2. Remove from custom lessons if it was present
+  const current = getStoredCustomLessons();
+  const filtered = current.filter((l) => l.id !== lessonId);
+  saveStoredCustomLessons(filtered);
+
+  // 3. Cascade delete videos, attachments, and MCQs in local CMS store
+  deleteLessonCascadeFromStore(lessonId);
+
+  // 4. Supabase DB Cascade Deletion (triggers ON DELETE CASCADE in PostgreSQL)
+  try {
+    const { isSupabaseConfigured, supabase } = await import('./supabase');
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from('lessons').delete().eq('id', lessonId);
+    }
+  } catch (err) {
+    console.warn('Supabase cascade lesson delete notice:', err);
+  }
+
+  // 5. Notify all components
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('moeys-lessons-updated'));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  return true;
+}
+

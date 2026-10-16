@@ -112,6 +112,13 @@ export interface Translations {
   cancel: string;
   delete: string;
   edit: string;
+  quickAddLesson: string;
+  videoPlaylist: string;
+  addVideoToPlaylist: string;
+  addNewMcq: string;
+  nowPlaying: string;
+  nextVideo: string;
+  prevVideo: string;
   // Q&A / Public Comments
   qaSectionTitle: string;
   qaSubtitle: string;
@@ -268,6 +275,13 @@ const TRANSLATIONS: Record<Language, Translations> = {
     cancel: 'បោះបង់',
     delete: 'លុបចេញ',
     edit: 'កែសម្រួល',
+    quickAddLesson: 'បន្ថែមមេរៀនថ្មី',
+    videoPlaylist: 'បញ្ជីចាក់វីដេអូ',
+    addVideoToPlaylist: 'បន្ថែមវីដេអូទៅក្នុងបញ្ជីចាក់',
+    addNewMcq: 'បន្ថែមសំណួរថ្មី',
+    nowPlaying: 'កំពុងចាក់',
+    nextVideo: 'វីដេអូបន្ទាប់',
+    prevVideo: 'វីដេអូមុន',
     // Q&A / Public Comments
     qaSectionTitle: 'សំណួរ-ចម្លើយ និងមតិពិភាក្សា',
     qaSubtitle: 'សួរ ឬពិភាក្សាអំពីមេរៀននេះជាមួយលោកគ្រូ-អ្នកគ្រូ និងសិស្សានុសិស្សដទៃទៀត (មិនបាច់ចូលប្រព័ន្ធ)',
@@ -422,6 +436,13 @@ const TRANSLATIONS: Record<Language, Translations> = {
     cancel: 'Cancel',
     delete: 'Delete',
     edit: 'Edit',
+    quickAddLesson: 'Quick Add Lesson',
+    videoPlaylist: 'Video Playlist',
+    addVideoToPlaylist: 'Add Video to Playlist',
+    addNewMcq: 'Add New MCQ',
+    nowPlaying: 'Now Playing',
+    nextVideo: 'Next Video',
+    prevVideo: 'Previous Video',
     // Q&A / Public Comments
     qaSectionTitle: 'Q&A & Lesson Discussion',
     qaSubtitle: 'Ask questions or discuss concepts directly with teachers and fellow students (No login required)',

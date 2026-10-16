@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Video,
   FileQuestion,
@@ -24,9 +25,25 @@ import {
 import { SUBJECTS, SubjectId, GRADES, GradeLevel } from '@/lib/curriculum-data';
 import { useLanguage } from '@/context/language-context';
 
-export default function HomePage() {
+function parseGrade(val: string | null): GradeLevel {
+  const num = val ? parseInt(val, 10) : 12;
+  return num >= 7 && num <= 12 ? (num as GradeLevel) : 12;
+}
+
+function HomePageContent() {
   const { t, isKhmer } = useLanguage();
-  const [activeGrade, setActiveGrade] = useState<GradeLevel>(12);
+  const searchParams = useSearchParams();
+
+  // Read initial grade from query parameter if present, otherwise default to 12
+  const gradeQuery = searchParams.get('grade');
+  const [activeGrade, setActiveGrade] = useState<GradeLevel>(() => parseGrade(gradeQuery));
+
+  useEffect(() => {
+    const g = searchParams.get('grade');
+    if (g) {
+      setActiveGrade(parseGrade(g));
+    }
+  }, [searchParams]);
 
   const iconMap: Record<SubjectId, React.ReactNode> = {
     math: <Calculator className="w-6 h-6" />,
@@ -124,7 +141,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 2. GRADE LEVEL SELECTOR CARDS */}
+      {/* 2. GRADE LEVEL SELECTOR CARDS - DYNAMICALLY PASSES GRADE 7 TO 12 */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
@@ -139,6 +156,7 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* Dynamic Grade Cards: Clicking any card navigates to /hub?grade=${g} */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {GRADES.map((g) => {
             const isSelected = activeGrade === g;
@@ -146,10 +164,11 @@ export default function HomePage() {
             const isDiploma = g === 9;
 
             return (
-              <button
+              <Link
                 key={g}
+                href={`/videos?grade=${g}`}
                 onClick={() => setActiveGrade(g)}
-                className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
+                className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden group hover:shadow-xl hover:-translate-y-1 block ${
                   isSelected
                     ? 'bg-blue-600 text-white shadow-lg border-blue-600 ring-2 ring-blue-500/20'
                     : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60'
@@ -188,25 +207,59 @@ export default function HomePage() {
                 >
                   {isKhmer ? '៥ មុខវិជ្ជាស្នូល' : '5 Core Subjects'}
                 </div>
-              </button>
+
+                <div
+                  className={`mt-3 flex items-center gap-1 text-[11px] font-bold transition-all ${
+                    isSelected
+                      ? 'text-blue-100'
+                      : 'text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5'
+                  }`}
+                >
+                  <span>{isKhmer ? 'ចូលរៀន →' : 'Enter Hub →'}</span>
+                </div>
+              </Link>
             );
           })}
         </div>
       </section>
 
-      {/* 3. 5 CORE SUBJECT CARDS */}
+      {/* 3. 5 CORE SUBJECT CARDS - DYNAMICALLY PASSES SUBJECT AND GRADE */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 mb-16">
-        <div className="mb-6">
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-            {isKhmer ? 'មុខវិជ្ជាវិទ្យាសាស្ត្រ និងភាសាទាំង ៥' : 'The 5 Core Academic Disciplines'}
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
-            {isKhmer
-              ? 'ជ្រើសរើសមុខវិជ្ជាដើម្បីចូលមើលមេរៀនវីដេអូ ឬធ្វើលំហាត់ MCQ ស្តង់ដារ ១០ សំណួរ'
-              : 'Select a subject to watch video lectures or solve 10-MCQ quizzes.'}
-          </p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+              {isKhmer ? 'មុខវិជ្ជាវិទ្យាសាស្ត្រ និងភាសាទាំង ៥' : 'The 5 Core Academic Disciplines'}
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
+              {isKhmer
+                ? `បង្ហាញមុខវិជ្ជាសម្រាប់ថ្នាក់ទី ${activeGrade}។ ជ្រើសរើសមុខវិជ្ជាដើម្បីចូលមើលមេរៀន ឬធ្វើលំហាត់ MCQ។`
+                : `Showing curriculum for Grade ${activeGrade}. Select a subject to watch video lectures or solve quizzes.`}
+            </p>
+          </div>
+
+          {/* Quick Grade Filter Pills for Subject Cards */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 bg-white/60 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 px-2 flex-shrink-0">
+              {t('grade')}:
+            </span>
+            {GRADES.map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setActiveGrade(g)}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeGrade === g
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
         </div>
 
+        {/* Dynamic Subject Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {(Object.keys(SUBJECTS) as SubjectId[]).map((subjKey) => {
             const subj = SUBJECTS[subjKey];
@@ -217,18 +270,28 @@ export default function HomePage() {
                 key={subjKey}
                 className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:shadow-2xl transition-all group hover:-translate-y-1"
               >
-                <div>
+                {/* Clickable Card Header & Details */}
+                <Link
+                  href={`/videos?subject=${subjKey}&grade=${activeGrade}`}
+                  className="block cursor-pointer"
+                  title={`${subj.nameEn} - Grade ${activeGrade}`}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div
                       className={`w-12 h-12 rounded-2xl bg-gradient-to-r ${subj.gradient} text-white flex items-center justify-center shadow-md`}
                     >
                       {icon}
                     </div>
-                    <span
-                      className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${subj.badgeBg} ${subj.badgeText}`}
-                    >
-                      {subj.code}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        {t('grade')} {activeGrade}
+                      </span>
+                      <span
+                        className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${subj.badgeBg} ${subj.badgeText}`}
+                      >
+                        {subj.code}
+                      </span>
+                    </div>
                   </div>
 
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
@@ -238,8 +301,9 @@ export default function HomePage() {
                   <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
                     {isKhmer ? subj.descriptionKm : subj.descriptionEn}
                   </p>
-                </div>
+                </Link>
 
+                {/* Direct Action Buttons: Video Hub & MCQ Practice with dynamic subject & grade */}
                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                   <Link
                     href={`/videos?subject=${subjKey}&grade=${activeGrade}`}
@@ -362,5 +426,26 @@ export default function HomePage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function HomePageLoadingFallback() {
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-8">
+      <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center animate-pulse shadow-lg mb-4">
+        <GraduationCap className="w-6 h-6 text-white" />
+      </div>
+      <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+        Loading MoEYS Learning Platform...
+      </p>
+    </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={<HomePageLoadingFallback />}>
+      <HomePageContent />
+    </Suspense>
   );
 }

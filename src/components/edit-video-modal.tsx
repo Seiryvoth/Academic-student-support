@@ -323,7 +323,7 @@ export const EditVideoModal: React.FC<EditVideoModalProps> = ({
                       <span className="w-5 h-5 rounded-md bg-blue-600 text-white flex items-center justify-center text-[10px]">
                         {qIdx + 1}
                       </span>
-                      <span>{t('question')} #{qIdx + 1}</span>
+                      <span>{isKhmer ? `សំណួរទី ${qIdx + 1}` : `Question #${qIdx + 1}`}</span>
                     </span>
 
                     <div className="flex items-center gap-3">

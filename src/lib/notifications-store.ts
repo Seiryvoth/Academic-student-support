@@ -10,7 +10,7 @@ export interface ActivityNotificationItem {
   grade?: GradeLevel;
   lessonId?: string;
   actorName: string;
-  actorRole: 'super_admin' | 'subject_lead';
+  actorRole: 'super_admin' | 'subject_lead' | 'student';
   titleKm: string;
   titleEn: string;
   messageKm: string;
@@ -139,7 +139,7 @@ export async function getStoredActivities(): Promise<ActivityNotificationItem[]>
           grade: row.grade ? Number(row.grade) as GradeLevel : undefined,
           lessonId: row.lesson_id || undefined,
           actorName: String(row.actor_name),
-          actorRole: row.actor_role === 'super_admin' ? 'super_admin' : 'subject_lead',
+          actorRole: row.actor_role === 'super_admin' ? 'super_admin' : row.actor_role === 'student' ? 'student' : 'subject_lead',
           titleKm: String(row.title_km),
           titleEn: String(row.title_en),
           messageKm: String(row.message_km),
@@ -171,7 +171,7 @@ export async function recordActivityNotification(params: {
   grade?: GradeLevel;
   lessonId?: string;
   actorName: string;
-  actorRole: 'super_admin' | 'subject_lead';
+  actorRole: 'super_admin' | 'subject_lead' | 'student';
   titleKm: string;
   titleEn: string;
   messageKm: string;

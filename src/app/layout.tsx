@@ -1,24 +1,10 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Kantumruy_Pro } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 import { LanguageProvider } from '@/context/language-context';
 import { Navbar } from '@/components/navbar';
 import { InstallPwaBanner } from '@/components/install-pwa-banner';
 import { NotificationToast } from '@/components/notification-toast';
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-});
-
-const kantumruyPro = Kantumruy_Pro({
-  subsets: ['khmer', 'latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-kantumruy',
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   title: 'MoEYS Academic & Student Support Platform (Grades 7–12)',
@@ -49,7 +35,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="km" suppressHydrationWarning className={`${inter.variable} ${kantumruyPro.variable}`}>
+    <html lang="km" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kantumruy+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="min-h-screen flex flex-col antialiased selection:bg-blue-500/20 selection:text-blue-600 dark:selection:text-blue-300">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <LanguageProvider>

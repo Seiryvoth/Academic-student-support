@@ -80,6 +80,7 @@ async function runSeeder() {
         hint_en: q.hintEn,
         explanation_km: q.explanationKm,
         explanation_en: q.explanationEn,
+        question_image_url: q.questionImageUrl || null,
       });
     }
   }

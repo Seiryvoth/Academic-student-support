@@ -11,6 +11,9 @@ import {
   CheckCircle2,
   FileQuestion,
   Eye,
+  ImageIcon,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import {
   CurriculumMcq,
@@ -21,6 +24,37 @@ import {
 } from '@/lib/curriculum-mcqs-generator';
 import { useLanguage } from '@/context/language-context';
 import { LatexRenderer } from './latex-renderer';
+import {
+  SVG_NUMBER_LINE,
+  SVG_PRIME_VENN,
+  SVG_SQUARE_GRID,
+  SVG_RATIO_BAR,
+  SVG_DISCOUNT_TAG,
+  SVG_PARALLEL_LINES,
+  SVG_CIRCLE,
+  SVG_3D_CUBOID,
+  SVG_REFLECTION,
+  SVG_BAR_CHART,
+  SVG_SPINNER,
+  SVG_EQUATION_BALANCE,
+} from '@/lib/grade7-math-svgs';
+import {
+  SVG_HISTOGRAM,
+  SVG_3D_CYLINDER,
+  SVG_COORDINATE_GRAPH,
+  SVG_CIRCLE_ANGLES,
+  SVG_SPECIAL_QUADRILATERALS,
+} from '@/lib/grade8-math-svgs';
+import {
+  SVG_PYTHAGOREAN_THEOREM,
+  SVG_THALES_THEOREM,
+  SVG_SIMILAR_TRIANGLES,
+  SVG_CIRCLE_ANGLE_PROPERTIES,
+  SVG_CIRCLES_AND_LINES,
+  SVG_SOLIDS_G9,
+  SVG_DISTANCE_BETWEEN_POINTS,
+  SVG_SYSTEM_LINEAR_EQUATIONS,
+} from '@/lib/grade9-math-svgs';
 
 interface EditCurriculumMcqModalProps {
   isOpen: boolean;
@@ -49,6 +83,7 @@ export const EditCurriculumMcqModal: React.FC<EditCurriculumMcqModalProps> = ({
   const [hintEn, setHintEn] = useState('');
   const [explanationKm, setExplanationKm] = useState('');
   const [explanationEn, setExplanationEn] = useState('');
+  const [questionImageUrl, setQuestionImageUrl] = useState<string>('');
   const [previewActive, setPreviewActive] = useState<boolean>(true);
 
   useEffect(() => {
@@ -63,6 +98,7 @@ export const EditCurriculumMcqModal: React.FC<EditCurriculumMcqModalProps> = ({
       setHintEn(mcq.hintEn || '');
       setExplanationKm(mcq.explanationKm || '');
       setExplanationEn(mcq.explanationEn || '');
+      setQuestionImageUrl(mcq.questionImageUrl || '');
     }
   }, [mcq]);
 
@@ -82,6 +118,19 @@ export const EditCurriculumMcqModal: React.FC<EditCurriculumMcqModalProps> = ({
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setQuestionImageUrl(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -97,9 +146,35 @@ export const EditCurriculumMcqModal: React.FC<EditCurriculumMcqModalProps> = ({
       hintEn: hintEn.trim(),
       explanationKm: explanationKm.trim(),
       explanationEn: explanationEn.trim(),
+      questionImageUrl: questionImageUrl.trim() || undefined,
     };
 
     const saved = await updateCurriculumMcqInStore(updatedMcq);
+
+    // Also sync with unified CMS store if matching
+    try {
+      const { updateUnifiedMcqRecord, getStoredUnifiedMcqs } = await import('@/lib/cms-unified-store');
+      const existingUnified = getStoredUnifiedMcqs().find(
+        (m) => m.id === mcq.id || (m.lesson_id === mcq.lessonId && (m as any).questionNumber === mcq.questionNumber)
+      );
+      if (existingUnified) {
+        await updateUnifiedMcqRecord(existingUnified.id, {
+          question_km: questionKm.trim(),
+          question_en: questionEn.trim(),
+          options: optionsKm,
+          correct_answer: correctAnswer,
+          hint_km: hintKm.trim(),
+          hint_en: hintEn.trim(),
+          explanation_km: explanationKm.trim(),
+          explanation_en: explanationEn.trim(),
+          difficulty,
+          question_image_url: questionImageUrl.trim() || null,
+        });
+      }
+    } catch {
+      // Graceful fallback
+    }
+
     onSaved(saved);
     onClose();
   };
@@ -250,6 +325,97 @@ export const EditCurriculumMcqModal: React.FC<EditCurriculumMcqModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Question Image / Visual Diagram Support */}
+          <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>{isKhmer ? 'រូបគំនូរ ឬក្រាបធរណីមាត្រ (Question Image / Diagram URL)' : 'Visual Diagram / Image (Optional)'}</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <label className="cursor-pointer px-2.5 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-1.5 transition-colors">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{isKhmer ? 'ផ្ទុកឡើងរូបភាព (Upload)' : 'Upload File'}</span>
+                  <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                </label>
+                {questionImageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setQuestionImageUrl('')}
+                    className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                    title={isKhmer ? 'លុបរូបភាព' : 'Remove Image'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <input
+              type="text"
+              value={questionImageUrl}
+              onChange={(e) => setQuestionImageUrl(e.target.value)}
+              placeholder="https://... ឬ data:image/svg+xml;..."
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono"
+            />
+
+            {/* Quick SVG Diagram Presets for Teachers */}
+            <div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                {isKhmer ? 'គំរូរូបភាពរហ័ស (Quick Diagram Presets):' : 'Quick Diagram Presets:'}
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { nameKm: 'បន្ទាត់ចំនួន', nameEn: 'Number Line', svg: SVG_NUMBER_LINE },
+                  { nameKm: 'ដ្យាក្រាមវ៉ែន GCD', nameEn: 'Venn GCD', svg: SVG_PRIME_VENN },
+                  { nameKm: 'ការេ 5x5', nameEn: 'Square Grid', svg: SVG_SQUARE_GRID },
+                  { nameKm: 'ផលធៀប 60/40', nameEn: 'Ratio Bar', svg: SVG_RATIO_BAR },
+                  { nameKm: 'ស្លាកបញ្ចុះតម្លៃ', nameEn: 'Discount Tag', svg: SVG_DISCOUNT_TAG },
+                  { nameKm: 'បន្ទាត់ស្រប', nameEn: 'Parallel Lines', svg: SVG_PARALLEL_LINES },
+                  { nameKm: 'រង្វង់ r=7', nameEn: 'Circle', svg: SVG_CIRCLE },
+                  { nameKm: 'ប្រលេពីប៉ែត 3D', nameEn: '3D Cuboid', svg: SVG_3D_CUBOID },
+                  { nameKm: 'ភាពឆ្លុះប្លង់', nameEn: 'Reflection', svg: SVG_REFLECTION },
+                  { nameKm: 'ក្រាបស្ថិតិ', nameEn: 'Bar Chart', svg: SVG_BAR_CHART },
+                  { nameKm: 'កង់វិល ៤ ពណ៌', nameEn: 'Spinner', svg: SVG_SPINNER },
+                  { nameKm: 'ជញ្ជីងសមីការ', nameEn: 'Balance Scale', svg: SVG_EQUATION_BALANCE },
+                  { nameKm: 'អ៊ីស្តូក្រាម G8', nameEn: 'Histogram G8', svg: SVG_HISTOGRAM },
+                  { nameKm: 'ស៊ីឡាំង 3D G8', nameEn: 'Cylinder G8', svg: SVG_3D_CYLINDER },
+                  { nameKm: 'ក្រាបបន្ទាត់ G8', nameEn: 'Coordinate Graph G8', svg: SVG_COORDINATE_GRAPH },
+                  { nameKm: 'មុំក្នុងរង្វង់ G8', nameEn: 'Circle Angles G8', svg: SVG_CIRCLE_ANGLES },
+                  { nameKm: 'ចតុកោណពិសេស G8', nameEn: 'Quadrilaterals G8', svg: SVG_SPECIAL_QUADRILATERALS },
+                  { nameKm: 'ពីតាគ័រ G9', nameEn: 'Pythagoras G9', svg: SVG_PYTHAGOREAN_THEOREM },
+                  { nameKm: 'តាលែស G9', nameEn: 'Thales G9', svg: SVG_THALES_THEOREM },
+                  { nameKm: 'ត្រីកោណដូចគ្នា G9', nameEn: 'Similar Triangles G9', svg: SVG_SIMILAR_TRIANGLES },
+                  { nameKm: 'មុំក្នុងរង្វង់ G9', nameEn: 'Circle Angles G9', svg: SVG_CIRCLE_ANGLE_PROPERTIES },
+                  { nameKm: 'បន្ទាត់ប៉ះរង្វង់ G9', nameEn: 'Tangent Circle G9', svg: SVG_CIRCLES_AND_LINES },
+                  { nameKm: 'កោណ & ស្វ៊ែរ G9', nameEn: 'Cone & Sphere G9', svg: SVG_SOLIDS_G9 },
+                  { nameKm: 'ចម្ងាយពីរចំណុច G9', nameEn: 'Distance 2-Points G9', svg: SVG_DISTANCE_BETWEEN_POINTS },
+                  { nameKm: 'ប្រព័ន្ធសមីការ G9', nameEn: 'Linear System G9', svg: SVG_SYSTEM_LINEAR_EQUATIONS },
+                ].map((preset, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setQuestionImageUrl(preset.svg)}
+                    className="px-2 py-0.5 text-[10px] font-medium rounded-md bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors"
+                  >
+                    + {isKhmer ? preset.nameKm : preset.nameEn}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Diagram Thumbnail Preview */}
+            {questionImageUrl && (
+              <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center">
+                <img
+                  src={questionImageUrl}
+                  alt="Question Diagram Preview"
+                  className="max-h-40 w-auto object-contain rounded-lg shadow-xs"
+                />
+              </div>
+            )}
+          </div>
 
           {/* 5 Options (A, B, C, D, E) */}
           <div className="space-y-3 pt-2">

@@ -19,13 +19,68 @@ export interface CurriculumMcq {
   hintEn: string;
   explanationKm: string;
   explanationEn: string;
+  questionImageUrl?: string;
 }
 
 // Hand-crafted exemplary questions for featured lessons across subjects & grades,
 // plus an intelligent generator for full 10-MCQ sets (3 Basic, 4 Medium, 3 Advanced) for every lesson.
+import { getGrade7MathMcqsForLesson, isGrade7MathLesson } from './grade7-math-mcqs';
+import { getGrade8MathMcqsForLesson, isGrade8MathLesson } from './grade8-math-mcqs';
+import { getGrade9MathMcqsForLesson, isGrade9MathLesson } from './grade9-math-mcqs';
+import { getGrade10MathMcqsForLesson, isGrade10MathLesson } from './grade10-math-mcqs';
+import { getGrade11MathMcqsForLesson, isGrade11MathLesson } from './grade11-math-mcqs';
+import { getGrade12MathMcqsForLesson, isGrade12MathLesson } from './grade12-math-mcqs';
 
 export function generate10McqsForLesson(lesson: LessonItem): CurriculumMcq[] {
   const { id: lessonId, subject, grade, titleKm, titleEn } = lesson;
+
+  // Dedicated Grade 7 Mathematics 22 lessons with 10 exact questions each
+  if (isGrade7MathLesson(lessonId) || (subject === 'math' && grade === 7)) {
+    const g7Questions = getGrade7MathMcqsForLesson(lessonId);
+    if (g7Questions && g7Questions.length > 0) {
+      return g7Questions;
+    }
+  }
+
+  // Dedicated Grade 8 Mathematics 18 lessons with 10 exact questions each
+  if (isGrade8MathLesson(lessonId) || (subject === 'math' && grade === 8)) {
+    const g8Questions = getGrade8MathMcqsForLesson(lessonId);
+    if (g8Questions && g8Questions.length > 0) {
+      return g8Questions;
+    }
+  }
+
+  // Dedicated Grade 9 Mathematics 18 lessons with 10 exact questions each
+  if (isGrade9MathLesson(lessonId) || (subject === 'math' && grade === 9)) {
+    const g9Questions = getGrade9MathMcqsForLesson(lessonId);
+    if (g9Questions && g9Questions.length > 0) {
+      return g9Questions;
+    }
+  }
+
+  // Dedicated Grade 10 Mathematics 26 lessons with 10 exact questions each
+  if (isGrade10MathLesson(lessonId) || (subject === 'math' && grade === 10)) {
+    const g10Questions = getGrade10MathMcqsForLesson(lessonId);
+    if (g10Questions && g10Questions.length > 0) {
+      return g10Questions;
+    }
+  }
+
+  // Dedicated Grade 11 Mathematics 28 lessons with 10 exact questions each
+  if (isGrade11MathLesson(lessonId) || (subject === 'math' && grade === 11)) {
+    const g11Questions = getGrade11MathMcqsForLesson(lessonId);
+    if (g11Questions && g11Questions.length > 0) {
+      return g11Questions;
+    }
+  }
+
+  // Dedicated Grade 12 Mathematics 27 lessons with 10 exact questions each
+  if (isGrade12MathLesson(lessonId) || (subject === 'math' && grade === 12)) {
+    const g12Questions = getGrade12MathMcqsForLesson(lessonId);
+    if (g12Questions && g12Questions.length > 0) {
+      return g12Questions;
+    }
+  }
 
   const result: CurriculumMcq[] = [];
 
@@ -363,14 +418,14 @@ export function getCustomMcqsRecord(): Record<string, CurriculumMcq> {
   }
 }
 
-// Generate all 10 MCQs for all MoEYS lessons, merged with teacher edits
+// Generate all MCQs for all MoEYS lessons, merged with teacher edits & custom added MCQs
 export function getCurriculumMcqsForLesson(lessonId: string): CurriculumMcq[] {
   const lesson = getAllLessons().find((l) => l.id === lessonId);
   if (!lesson) return [];
   const baseMcqs = generate10McqsForLesson(lesson);
   const customOverrides = getCustomMcqsRecord();
 
-  return baseMcqs.map((base) => {
+  const mapped = baseMcqs.map((base) => {
     const customKey = `${lessonId}-${base.questionNumber}`;
     if (customOverrides[customKey]) {
       return {
@@ -380,6 +435,31 @@ export function getCurriculumMcqsForLesson(lessonId: string): CurriculumMcq[] {
     }
     return base;
   });
+
+  // Find any additional custom questions for this lesson (questionNumber > 10 or dynamically added)
+  const additional = Object.keys(customOverrides)
+    .filter((k) => k.startsWith(`${lessonId}-`))
+    .map((k) => customOverrides[k])
+    .filter((q) => !mapped.some((m) => m.questionNumber === q.questionNumber));
+
+  return [...mapped, ...additional].sort((a, b) => a.questionNumber - b.questionNumber);
+}
+
+// Add a brand new curriculum MCQ for a lesson
+export async function addCurriculumMcqToStore(
+  mcqData: Omit<CurriculumMcq, 'id'> & { id?: string }
+): Promise<CurriculumMcq> {
+  const existing = getCurriculumMcqsForLesson(mcqData.lessonId);
+  const nextQNum = mcqData.questionNumber || (existing.length > 0 ? Math.max(...existing.map((q) => q.questionNumber)) + 1 : 1);
+  const id = mcqData.id || `mcq-${mcqData.lessonId}-${nextQNum}-${Date.now().toString(36)}`;
+
+  const newMcq: CurriculumMcq = {
+    ...mcqData,
+    id,
+    questionNumber: nextQNum,
+  };
+
+  return updateCurriculumMcqInStore(newMcq);
 }
 
 // Save or edit a single curriculum MCQ
@@ -417,6 +497,7 @@ export async function updateCurriculumMcqInStore(
           hint_en: updatedMcq.hintEn,
           explanation_km: updatedMcq.explanationKm,
           explanation_en: updatedMcq.explanationEn,
+          question_image_url: updatedMcq.questionImageUrl || null,
         },
         { onConflict: 'lesson_id,question_number' }
       );
