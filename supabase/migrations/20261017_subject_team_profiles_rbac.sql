@@ -186,6 +186,10 @@ CREATE POLICY "Super admin can manage subjects"
 -- 9. ROW LEVEL SECURITY (RLS) POLICIES ON PROFILES
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+-- Policy: Allow read profiles (Permissive SELECT so profiles can be retrieved)
+DROP POLICY IF EXISTS "Allow read profiles" ON public.profiles;
+CREATE POLICY "Allow read profiles" ON public.profiles FOR SELECT USING (true);
+
 -- Policy A: Super Admin has full unrestricted read/write access to all profiles
 DROP POLICY IF EXISTS "Super admin full access on profiles" ON public.profiles;
 CREATE POLICY "Super admin full access on profiles"

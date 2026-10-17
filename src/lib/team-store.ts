@@ -169,12 +169,29 @@ async function getAuthHeaders(): Promise<HeadersInit> {
 }
 
 /**
- * Fetches all team members directly from backend API connected to Supabase
+ * Fetches all team members handling both client-side Supabase query and backend API
  */
 export async function fetchTeamFromApi(): Promise<{
   users: SubjectTeamMember[];
   subjects: SubjectInfo[];
 }> {
+  let clientProfiles: any[] = [];
+
+  // 1. Direct client query via Supabase SDK if available (handles client session & logs RLS errors)
+  if (typeof window !== 'undefined' && isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase.from('profiles').select('*');
+      if (error) {
+        console.error('[Supabase RLS Error] Failed to query public.profiles client-side:', error.message, error);
+      } else if (Array.isArray(data)) {
+        clientProfiles = data;
+      }
+    } catch (clientErr) {
+      console.error('[Supabase Client Error] Unexpected exception selecting profiles:', clientErr);
+    }
+  }
+
+  // 2. Server-side API query (bypasses client-side RLS limits with server-side admin context)
   try {
     const headers = await getAuthHeaders();
     const res = await fetch('/api/admin/users', {
@@ -185,9 +202,23 @@ export async function fetchTeamFromApi(): Promise<{
     if (res.ok) {
       const data = await res.json();
       const subjects: SubjectInfo[] = data.subjects || [];
-      const rawUsers: any[] = Array.isArray(data.users) ? data.users : [];
+      const apiUsers: any[] = Array.isArray(data.users) ? data.users : [];
 
-      const mappedUsers: SubjectTeamMember[] = rawUsers
+      // Merge both client-side and server-side sources
+      const userMap = new Map<string, any>();
+      apiUsers.forEach((u: any) => {
+        const key = (u.id || u.email || '').toLowerCase().trim();
+        if (key) userMap.set(key, u);
+      });
+      clientProfiles.forEach((p: any) => {
+        const key = (p.id || p.email || '').toLowerCase().trim();
+        if (key) {
+          userMap.set(key, { ...(userMap.get(key) || {}), ...p });
+        }
+      });
+
+      const mergedRaw = Array.from(userMap.values());
+      const mappedUsers: SubjectTeamMember[] = mergedRaw
         .filter((u: any) => !isMockMember(u))
         .map((u: any) => {
           const rawSubj = u.assigned_subject_id || u.subject_assigned || null;
@@ -196,11 +227,23 @@ export async function fetchTeamFromApi(): Promise<{
             (u.subjects && u.subjects.code) ||
             resolveSubjectCode(rawSubj, subjects);
 
+          const rawRole = (u.role || '').toString().trim().toLowerCase();
+          const role: 'super_admin' | 'subject_lead' | 'subject_member' | 'student' =
+            rawRole === 'super_admin' || rawRole === 'admin'
+              ? 'super_admin'
+              : rawRole === 'subject_lead'
+              ? 'subject_lead'
+              : rawRole === 'student'
+              ? 'student'
+              : 'subject_member';
+
+          const fullName = (u.full_name || u.fullName || u.email || 'MoEYS Staff').toString().trim();
+
           return {
-            id: u.id || u.user_id,
-            email: u.email,
-            fullName: u.full_name || u.email,
-            role: u.role,
+            id: u.id || u.user_id || u.email,
+            email: u.email || '',
+            fullName: fullName,
+            role: role,
             assignedSubjectId: rawSubj,
             assignedSubjectCode: subjCode,
             subjectNameKm: u.subject_name_km || (u.subjects && u.subjects.name_km),
@@ -210,12 +253,37 @@ export async function fetchTeamFromApi(): Promise<{
           };
         });
 
-      // Update local storage with real Supabase profiles
+      // Update local storage with real profiles
       saveStoredTeamMembers(mappedUsers);
       return { users: mappedUsers, subjects };
     }
   } catch (err) {
     console.warn('API fetch team error:', err);
+  }
+
+  // Fallback to clientProfiles if API route had an issue
+  if (clientProfiles.length > 0) {
+    const fallbackMapped: SubjectTeamMember[] = clientProfiles
+      .filter((u: any) => !isMockMember(u))
+      .map((u: any) => {
+        const rawRole = (u.role || '').toString().trim().toLowerCase();
+        const role =
+          rawRole === 'super_admin' || rawRole === 'admin'
+            ? 'super_admin'
+            : rawRole === 'subject_lead'
+            ? 'subject_lead'
+            : 'subject_member';
+        return {
+          id: u.id,
+          email: u.email,
+          fullName: (u.full_name || u.email || 'Staff').trim(),
+          role: role as any,
+          assignedSubjectId: u.assigned_subject_id,
+          assignedSubjectCode: resolveSubjectCode(u.assigned_subject_id),
+          createdAt: u.created_at || new Date().toISOString(),
+        };
+      });
+    return { users: fallbackMapped, subjects: [] };
   }
 
   return {

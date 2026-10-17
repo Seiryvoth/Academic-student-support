@@ -151,12 +151,19 @@ export function SubjectTeamCard({
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {members.map((m) => {
-                const isLead = m.role === 'subject_lead';
-                const isSuper = m.role === 'super_admin';
+                const cleanRole = (m.role || '').toString().trim().toLowerCase();
+                const isLead = cleanRole === 'subject_lead';
+                const isSuper = cleanRole === 'super_admin' || cleanRole === 'admin';
                 const isSelf =
                   (currentUserId && currentUserId === m.id) ||
                   (currentUserEmail &&
-                    currentUserEmail.toLowerCase() === m.email.toLowerCase());
+                    currentUserEmail.toLowerCase().trim() === (m.email || '').toLowerCase().trim());
+
+                const displayName = (m.fullName || m.email || (isKhmer ? 'សមាជិក' : 'Team Member')).trim();
+                const initials = (displayName
+                  .replace(/^(លោក|លោកស្រី|អ្នកគ្រូ|សាស្ត្រាចារ្យ|លោកបណ្ឌិត|Mr\.|Mrs\.|Ms\.|Prof\.|Dr\.)\s*/i, '') || 'ST')
+                  .substring(0, 2)
+                  .toUpperCase();
 
                 return (
                   <tr
@@ -175,17 +182,12 @@ export function SubjectTeamCard({
                               : 'bg-emerald-600'
                           }`}
                         >
-                          {m.fullName
-                            ? m.fullName
-                                .replace(/^(លោក|លោកស្រី|អ្នកគ្រូ|សាស្ត្រាចារ្យ|លោកបណ្ឌិត|Mr\.|Mrs\.|Ms\.|Prof\.|Dr\.)\s*/i, '')
-                                .substring(0, 2)
-                                .toUpperCase()
-                            : 'ST'}
+                          {initials}
                         </div>
                         <div>
                           <div className="flex items-center gap-1.5">
                             <span className="text-sm font-bold text-slate-900 dark:text-white">
-                              {m.fullName}
+                              {displayName}
                             </span>
                             {isSelf && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-semibold">

@@ -205,7 +205,18 @@ export default function StaffDashboardPage() {
     };
   }, [router]);
 
-  const isSuperAdmin = currentStaff?.role === 'super_admin';
+  const cleanStaffRole = (currentStaff?.role || '').toString().trim().toLowerCase();
+  const isSuperAdmin = cleanStaffRole === 'super_admin' || cleanStaffRole === 'admin';
+
+  const currentStaffSubject =
+    currentStaff?.subjectAssigned && currentStaff.subjectAssigned in SUBJECTS
+      ? SUBJECTS[currentStaff.subjectAssigned as SubjectId]
+      : null;
+
+  const currentSubject =
+    manageSubject && manageSubject in SUBJECTS
+      ? SUBJECTS[manageSubject]
+      : null;
 
   // Available lessons for Publish tab
   const availablePublishLessons = useMemo(() => {
@@ -363,7 +374,9 @@ export default function StaffDashboardPage() {
     });
 
     const staffName = currentStaff ? (isKhmer ? currentStaff.fullNameKm : currentStaff.fullNameEn) : 'Staff';
-    const subjMeta = SUBJECTS[formSubject];
+    const subjMeta = formSubject && formSubject in SUBJECTS ? SUBJECTS[formSubject] : null;
+    const subjNameKm = subjMeta?.nameKm || formSubject || 'មុខវិជ្ជា';
+    const subjNameEn = subjMeta?.nameEn || formSubject || 'Subject';
     recordActivityNotification({
       actionType: 'video_upload',
       subject: formSubject,
@@ -371,8 +384,8 @@ export default function StaffDashboardPage() {
       lessonId: formLessonId,
       actorName: staffName,
       actorRole: currentStaff?.role || 'subject_lead',
-      titleKm: `បានអាប់ឡូតវីដេអូមុខវិជ្ជា${subjMeta.nameKm}ថ្មី (ថ្នាក់ទី ${formGrade})`,
-      titleEn: `New ${subjMeta.nameEn} Video uploaded (Grade ${formGrade})`,
+      titleKm: `បានអាប់ឡូតវីដេអូមុខវិជ្ជា${subjNameKm}ថ្មី (ថ្នាក់ទី ${formGrade})`,
+      titleEn: `New ${subjNameEn} Video uploaded (Grade ${formGrade})`,
       messageKm: `បានផ្សាយវីដេអូ «${published.titleKm}» និងលំហាត់ស្ទង់ការយល់ដឹង`,
       messageEn: `Published video "${published.titleEn}" and comprehension quiz`,
     });
@@ -445,7 +458,9 @@ export default function StaffDashboardPage() {
   // Callback when a curriculum MCQ is saved from modal
   const handleCurriculumMcqSaved = (updated: CurriculumMcq) => {
     const staffName = currentStaff ? (isKhmer ? currentStaff.fullNameKm : currentStaff.fullNameEn) : 'Staff';
-    const subjMeta = SUBJECTS[updated.subject];
+    const subjMeta = updated.subject && updated.subject in SUBJECTS ? SUBJECTS[updated.subject] : null;
+    const subjNameKm = subjMeta?.nameKm || updated.subject || 'មុខវិជ្ជា';
+    const subjNameEn = subjMeta?.nameEn || updated.subject || 'Subject';
     recordActivityNotification({
       actionType: 'mcq_edit',
       subject: updated.subject,
@@ -453,8 +468,8 @@ export default function StaffDashboardPage() {
       lessonId: updated.lessonId,
       actorName: staffName,
       actorRole: currentStaff?.role || 'subject_lead',
-      titleKm: `បានកែសម្រួលលំហាត់ស្តង់ដារ MoEYS សំណួរទី #${updated.questionNumber} (${subjMeta.nameKm})`,
-      titleEn: `Updated standard MoEYS MCQ Question #${updated.questionNumber} (${subjMeta.nameEn})`,
+      titleKm: `បានកែសម្រួលលំហាត់ស្តង់ដារ MoEYS សំណួរទី #${updated.questionNumber} (${subjNameKm})`,
+      titleEn: `Updated standard MoEYS MCQ Question #${updated.questionNumber} (${subjNameEn})`,
       messageKm: `បានកែសម្រួលខ្លឹមសារសំណួរ ជម្រើសចម្លើយ និងដំណោះស្រាយលម្អិត`,
       messageEn: `Updated question prompt, choices, and step-by-step solution`,
     });
@@ -777,11 +792,20 @@ export default function StaffDashboardPage() {
                   {isKhmer ? currentStaff.fullNameKm : currentStaff.fullNameEn}
                 </h1>
                 <span className="px-2 py-0.5 text-xs font-bold rounded-md uppercase bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                  {isSuperAdmin ? 'Super Admin' : `${currentStaff.subjectAssigned} Lead`}
+                  {isSuperAdmin
+                    ? 'Super Admin'
+                    : `${currentStaffSubject?.nameEn || currentStaff.subjectAssigned || 'Staff'} Lead`}
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {currentStaff.email} • {isSuperAdmin ? 'គ្រប់គ្រងគ្រប់មុខវិជ្ជា និងគណនីគ្រូទាំងអស់' : `ចាក់សោលើមុខវិជ្ជា៖ ${SUBJECTS[currentStaff.subjectAssigned!].nameKm}`}
+                {currentStaff.email} •{' '}
+                {isSuperAdmin
+                  ? isKhmer
+                    ? 'គ្រប់គ្រងគ្រប់មុខវិជ្ជា និងគណនីទាំងអស់'
+                    : 'Universal Access: All Subjects & Accounts'
+                  : isKhmer
+                  ? `ចាត់តាំងលើមុខវិជ្ជា៖ ${currentStaffSubject?.nameKm || currentSubject?.nameKm || 'មិនបានចាត់តាំង / Unassigned'}`
+                  : `Assigned Subject: ${currentStaffSubject?.nameEn || currentSubject?.nameEn || 'Unassigned'}`}
               </p>
             </div>
           </div>
@@ -933,7 +957,11 @@ export default function StaffDashboardPage() {
               {!isSuperAdmin && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900 self-start md:self-auto">
                   <Lock className="w-3.5 h-3.5" />
-                  <span>Locked to {currentStaff.subjectAssigned} Lead</span>
+                  <span>
+                    {isKhmer
+                      ? `ចាក់សោលើមុខវិជ្ជា៖ ${currentStaffSubject?.nameKm || currentStaff.subjectAssigned || 'ទូទៅ'}`
+                      : `Locked to ${currentStaffSubject?.nameEn || currentStaff.subjectAssigned || 'Assigned'} Lead`}
+                  </span>
                 </span>
               )}
             </div>
@@ -953,7 +981,7 @@ export default function StaffDashboardPage() {
                 >
                   {(Object.keys(SUBJECTS) as SubjectId[]).map((s) => (
                     <option key={s} value={s}>
-                      {isKhmer ? SUBJECTS[s].nameKm : SUBJECTS[s].nameEn}
+                      {isKhmer ? SUBJECTS[s]?.nameKm || s : SUBJECTS[s]?.nameEn || s}
                     </option>
                   ))}
                 </select>
@@ -1639,7 +1667,7 @@ export default function StaffDashboardPage() {
                     <span>{t('selectSubject')}</span>
                     {!isSuperAdmin && (
                       <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-semibold">
-                        <Lock className="w-3 h-3" /> Locked to Lead
+                        <Lock className="w-3 h-3" /> Locked to {currentStaffSubject?.nameEn || currentStaff.subjectAssigned || 'Lead'}
                       </span>
                     )}
                   </label>
@@ -1651,7 +1679,7 @@ export default function StaffDashboardPage() {
                   >
                     {(Object.keys(SUBJECTS) as SubjectId[]).map((s) => (
                       <option key={s} value={s}>
-                        {isKhmer ? SUBJECTS[s].nameKm : SUBJECTS[s].nameEn}
+                        {isKhmer ? SUBJECTS[s]?.nameKm || s : SUBJECTS[s]?.nameEn || s}
                       </option>
                     ))}
                   </select>
@@ -1976,9 +2004,9 @@ export default function StaffDashboardPage() {
 
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {videos
-                .filter((v) => (isSuperAdmin ? true : v.subject === currentStaff.subjectAssigned))
+                .filter((v) => (isSuperAdmin ? true : (currentStaff?.subjectAssigned ? v.subject === currentStaff.subjectAssigned : true)))
                 .map((video) => {
-                  const subjectMeta = SUBJECTS[video.subject];
+                  const subjectMeta = video.subject && video.subject in SUBJECTS ? SUBJECTS[video.subject] : null;
                   return (
                     <div
                       key={video.id}
@@ -1991,9 +2019,9 @@ export default function StaffDashboardPage() {
                         <div className="truncate">
                           <div className="flex items-center gap-2 mb-1">
                             <span
-                              className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${subjectMeta.badgeBg} ${subjectMeta.badgeText}`}
+                              className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${subjectMeta?.badgeBg || 'bg-slate-100 border-slate-200'} ${subjectMeta?.badgeText || 'text-slate-700'}`}
                             >
-                              {isKhmer ? subjectMeta.nameKm : subjectMeta.nameEn}
+                              {isKhmer ? subjectMeta?.nameKm || video.subject : subjectMeta?.nameEn || video.subject}
                             </span>
                             <span className="text-xs font-semibold text-slate-500">
                               {t('grade')} {video.grade}
@@ -2073,8 +2101,9 @@ export default function StaffDashboardPage() {
 
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {staffList.map((st) => {
-                const isSuper = st.role === 'super_admin';
-                const subjectMeta = st.subjectAssigned ? SUBJECTS[st.subjectAssigned] : null;
+                const cleanStRole = (st.role || '').toString().trim().toLowerCase();
+                const isSuper = cleanStRole === 'super_admin' || cleanStRole === 'admin';
+                const subjectMeta = st.subjectAssigned && st.subjectAssigned in SUBJECTS ? SUBJECTS[st.subjectAssigned as SubjectId] : null;
 
                 return (
                   <div
@@ -2104,10 +2133,12 @@ export default function StaffDashboardPage() {
                             ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
                             : subjectMeta
                             ? `${subjectMeta.badgeBg} ${subjectMeta.badgeText}`
-                            : 'bg-slate-100'
+                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
                         }`}
                       >
-                        {isSuper ? 'Super Admin' : `${st.subjectAssigned} Lead`}
+                        {isSuper
+                          ? 'Super Admin'
+                          : `${subjectMeta ? (isKhmer ? subjectMeta.nameKm : subjectMeta.nameEn) : (st.subjectAssigned || 'Staff')} Lead`}
                       </span>
 
                       {!isSuper && (

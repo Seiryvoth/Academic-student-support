@@ -188,11 +188,11 @@ export async function GET(request: NextRequest) {
       // Fallback to direct select if relational join syntax unsupported
       const { data: plainProfiles, error: profError } = await admin
         .from('profiles')
-        .select('id, full_name, email, role, assigned_subject_id, created_at, updated_at')
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (profError) {
-        console.warn('Could not fetch profiles table:', profError.message);
+        console.error('[Supabase RLS/Admin Error] Could not fetch profiles table:', profError.message, profError);
       }
       if (plainProfiles && plainProfiles.length > 0) {
         fetchedProfiles = plainProfiles;

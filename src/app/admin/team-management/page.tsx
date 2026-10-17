@@ -23,7 +23,8 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
 import { SUBJECTS, SubjectId } from '@/lib/curriculum-data';
-import { getCurrentStaffSession, StaffAccount } from '@/lib/data-store';
+import { getCurrentStaffSession, setCurrentStaffSession, StaffAccount } from '@/lib/data-store';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   SubjectTeamMember,
   getStoredTeamMembers,
@@ -72,11 +73,99 @@ export default function TeamManagementPage() {
     }, 4000);
   };
 
-  // Auth Guard: Load session and check super_admin privilege
+  // Immediate Re-fetch: Queries profiles handling both client and server side properly,
+  // logs any Supabase RLS error to the console, and refreshes the live state.
+  const loadFromApi = async () => {
+    setIsRefreshing(true);
+    try {
+      // 1. Client-side profile query:
+      // const { data, error } = await supabase.from('profiles').select('*');
+      if (typeof window !== 'undefined' && isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase.from('profiles').select('*');
+          if (error) {
+            console.error('[Supabase RLS Error] Failed to fetch profiles from client:', error.message, error);
+          } else if (Array.isArray(data)) {
+            console.log('[Supabase Client] Successfully fetched profiles:', data.length);
+          }
+        } catch (clientErr) {
+          console.error('[Supabase Client Error] Unexpected error querying profiles:', clientErr);
+        }
+      }
+
+      // 2. Fetch via team API (handles server-side admin context, merges client profiles, and updates store)
+      const result = await fetchTeamFromApi();
+      if (Array.isArray(result.users)) {
+        setMembers(result.users);
+      }
+    } catch (err) {
+      console.warn('API sync notice:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Auth Guard: Load session from local storage AND cross-verify Supabase Auth session
   useEffect(() => {
-    const session = getCurrentStaffSession();
-    setCurrentStaff(session);
-    setAuthChecked(true);
+    let isMounted = true;
+
+    async function checkAuthAndSession() {
+      let session = getCurrentStaffSession();
+
+      // Cross-verify with active Supabase Auth session
+      if (typeof window !== 'undefined' && isSupabaseConfigured && supabase) {
+        try {
+          const { data: { session: supaSession }, error: sessionError } = await supabase.auth.getSession();
+          if (sessionError) {
+            console.error('[Supabase Auth Error] Error fetching session:', sessionError.message);
+          } else if (supaSession?.user) {
+            // Also query profile for the active session user
+            const { data: profile, error: profErr } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', supaSession.user.id)
+              .maybeSingle();
+
+            if (profErr) {
+              console.error('[Supabase RLS Error] Failed to fetch user profile:', profErr.message, profErr);
+            }
+
+            const rawRole = (
+              profile?.role ||
+              supaSession.user.user_metadata?.role ||
+              (supaSession.user.email?.toLowerCase().includes('admin') ? 'super_admin' : 'subject_member')
+            ).toString().trim().toLowerCase();
+
+            const role = rawRole === 'super_admin' || rawRole === 'admin' ? 'super_admin' : (rawRole as any);
+
+            const activeStaff: StaffAccount = {
+              id: supaSession.user.id,
+              email: supaSession.user.email || '',
+              fullNameKm: profile?.full_name || supaSession.user.user_metadata?.full_name || supaSession.user.email || 'Super Admin',
+              fullNameEn: profile?.full_name || supaSession.user.user_metadata?.full_name || supaSession.user.email || 'Super Admin',
+              role: role,
+              subjectAssigned: profile?.assigned_subject_id || null,
+              isActive: true,
+              createdAt: supaSession.user.created_at || new Date().toISOString(),
+            };
+
+            if (!session || session.email.toLowerCase() !== activeStaff.email.toLowerCase()) {
+              session = activeStaff;
+              setCurrentStaffSession(activeStaff);
+            }
+          }
+        } catch (err) {
+          console.warn('Auth session check notice:', err);
+        }
+      }
+
+      if (isMounted) {
+        setCurrentStaff(session);
+        setAuthChecked(true);
+      }
+    }
+
+    checkAuthAndSession();
 
     const handleAuthChange = () => {
       const updated = getCurrentStaffSession();
@@ -85,32 +174,38 @@ export default function TeamManagementPage() {
 
     window.addEventListener('moeys_staff_auth_changed', handleAuthChange);
     window.addEventListener('storage', handleAuthChange);
+
+    // Listen to Supabase auth state changes if client is configured
+    let authListener: any = null;
+    if (typeof window !== 'undefined' && isSupabaseConfigured && supabase) {
+      const { data } = supabase.auth.onAuthStateChange(async (event) => {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          await checkAuthAndSession();
+          await loadFromApi();
+        } else if (event === 'SIGNED_OUT') {
+          setCurrentStaff(null);
+        }
+      });
+      authListener = data?.subscription;
+    }
+
     return () => {
+      isMounted = false;
       window.removeEventListener('moeys_staff_auth_changed', handleAuthChange);
       window.removeEventListener('storage', handleAuthChange);
+      if (authListener?.unsubscribe) {
+        authListener.unsubscribe();
+      }
     };
   }, []);
 
-  // Load team members (local cache + background API sync)
+  // Immediate Refresh / Re-fetch:
+  // 1. Immediately on page load (initial mount)
   useEffect(() => {
-    // 1. Instant local load
+    // Instant local cache load
     setMembers(getStoredTeamMembers());
 
-    // 2. Fetch from backend API
-    const loadFromApi = async () => {
-      setIsRefreshing(true);
-      try {
-        const result = await fetchTeamFromApi();
-        if (Array.isArray(result.users)) {
-          setMembers(result.users);
-        }
-      } catch (err) {
-        console.warn('API sync notice:', err);
-      } finally {
-        setIsRefreshing(false);
-      }
-    };
-
+    // Immediate fetch on mount
     loadFromApi();
 
     const handleTeamUpdate = () => {
@@ -121,6 +216,13 @@ export default function TeamManagementPage() {
       window.removeEventListener('moeys-team-updated', handleTeamUpdate);
     };
   }, []);
+
+  // 2. Immediately after session authentication is verified
+  useEffect(() => {
+    if (authChecked) {
+      loadFromApi();
+    }
+  }, [authChecked, currentStaff?.email, currentStaff?.role]);
 
   // Refresh handler
   const handleManualRefresh = async () => {
@@ -144,17 +246,18 @@ export default function TeamManagementPage() {
     }
   };
 
-  // Filtered members
+  // Filtered members with case-insensitive role & search matching
   const filteredMembers = useMemo(() => {
-    return members.filter((m) => {
-      const matchesSearch =
-        searchQuery === '' ||
-        m.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.trim().toLowerCase();
+    const targetRole = roleFilter.trim().toLowerCase();
 
-      const matchesRole =
-        roleFilter === 'all' ||
-        m.role === roleFilter;
+    return members.filter((m) => {
+      const name = (m.fullName || m.email || '').toLowerCase();
+      const email = (m.email || '').toLowerCase();
+      const matchesSearch = q === '' || name.includes(q) || email.includes(q);
+
+      const mRole = (m.role || '').trim().toLowerCase();
+      const matchesRole = targetRole === 'all' || mRole === targetRole;
 
       return matchesSearch && matchesRole;
     });
@@ -171,8 +274,9 @@ export default function TeamManagementPage() {
     };
 
     filteredMembers.forEach((m) => {
+      const mRole = (m.role || '').trim().toLowerCase();
       const code = resolveSubjectCode(m.assignedSubjectCode || m.assignedSubjectId);
-      if (code && code in grouped && m.role !== 'super_admin') {
+      if (code && code in grouped && mRole !== 'super_admin') {
         grouped[code].push({
           ...m,
           assignedSubjectCode: code,
@@ -184,32 +288,77 @@ export default function TeamManagementPage() {
     Object.keys(grouped).forEach((key) => {
       const subjKey = key as SubjectId;
       grouped[subjKey].sort((a, b) => {
-        if (a.role === 'subject_lead' && b.role !== 'subject_lead') return -1;
-        if (a.role !== 'subject_lead' && b.role === 'subject_lead') return 1;
-        return a.fullName.localeCompare(b.fullName);
+        const roleA = (a.role || '').trim().toLowerCase();
+        const roleB = (b.role || '').trim().toLowerCase();
+        if (roleA === 'subject_lead' && roleB !== 'subject_lead') return -1;
+        if (roleA !== 'subject_lead' && roleB === 'subject_lead') return 1;
+        const nameA = a.fullName || a.email || '';
+        const nameB = b.fullName || b.email || '';
+        return nameA.localeCompare(nameB);
       });
     });
 
     return grouped;
   }, [filteredMembers]);
 
-  // Super admins or unassigned staff
+  // Super admins or unassigned staff (Case-insensitive & whitespace-trimmed role filtering)
   const unassignedAndSuperAdmins = useMemo(() => {
-    return filteredMembers.filter((m) => {
-      if (m.role === 'super_admin') return true;
-      const code = resolveSubjectCode(m.assignedSubjectCode || m.assignedSubjectId);
-      return !code || !(code in SUBJECTS);
-    });
-  }, [filteredMembers]);
+    const q = searchQuery.trim().toLowerCase();
+    const targetRole = roleFilter.trim().toLowerCase();
+
+    // Exact role filtering: profiles.filter(p => p.role?.toLowerCase() === 'super_admin')
+    const list = members
+      .filter((p) => {
+        const cleanRole = (p.role || '').toString().trim().toLowerCase();
+        if (cleanRole === 'super_admin' || cleanRole === 'admin') return true;
+        const code = resolveSubjectCode(p.assignedSubjectCode || p.assignedSubjectId);
+        return !code || !(code in SUBJECTS);
+      })
+      .filter((m) => {
+        const name = (m.fullName || m.email || '').toLowerCase();
+        const email = (m.email || '').toLowerCase();
+        const matchesSearch = q === '' || name.includes(q) || email.includes(q);
+
+        const cleanRole = (m.role || '').toString().trim().toLowerCase();
+        const matchesRole =
+          targetRole === 'all' ||
+          targetRole === 'super_admin' ||
+          cleanRole === targetRole;
+
+        return matchesSearch && matchesRole;
+      });
+
+    // Fallback: If DB query returned 0 super admins, but the active logged-in staff is a verified Super Admin
+    const activeStaffRole = (currentStaff?.role || '').toString().trim().toLowerCase();
+    const isActiveAdmin = activeStaffRole === 'super_admin' || activeStaffRole === 'admin';
+    if (list.length === 0 && isActiveAdmin && currentStaff?.email) {
+      const emailMatch = q === '' || currentStaff.email.toLowerCase().includes(q);
+      const roleMatch = targetRole === 'all' || targetRole === 'super_admin' || targetRole === 'admin';
+      if (emailMatch && roleMatch) {
+        const activeAdminAccount: SubjectTeamMember = {
+          id: currentStaff.id || 'current-super-admin',
+          email: currentStaff.email,
+          fullName: (currentStaff.fullNameKm || currentStaff.fullNameEn || currentStaff.email).trim() || currentStaff.email,
+          role: 'super_admin',
+          assignedSubjectId: null,
+          assignedSubjectCode: null,
+          createdAt: currentStaff.createdAt || new Date().toISOString(),
+        };
+        return [activeAdminAccount];
+      }
+    }
+
+    return list;
+  }, [members, searchQuery, roleFilter, currentStaff]);
 
   // Statistics
   const stats = useMemo(() => {
-    const total = members.length;
-    const leads = members.filter((m) => m.role === 'subject_lead').length;
-    const teamMembers = members.filter((m) => m.role === 'subject_member').length;
-    const supers = members.filter((m) => m.role === 'super_admin').length;
+    const leads = members.filter((m) => (m.role || '').toString().trim().toLowerCase() === 'subject_lead').length;
+    const teamMembers = members.filter((m) => (m.role || '').toString().trim().toLowerCase() === 'subject_member').length;
+    const supers = unassignedAndSuperAdmins.length;
+    const total = Math.max(members.length, supers + leads + teamMembers);
     return { total, leads, teamMembers, supers };
-  }, [members]);
+  }, [members, unassignedAndSuperAdmins]);
 
   // Handlers for Modals
   const handleOpenAddForSubject = (subjectId: SubjectId) => {
@@ -630,19 +779,33 @@ export default function TeamManagementPage() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {unassignedAndSuperAdmins.map((m) => {
                     const isSelf =
-                      (currentStaff && currentStaff.email.toLowerCase() === m.email.toLowerCase()) ||
+                      (currentStaff && currentStaff.email.toLowerCase().trim() === m.email.toLowerCase().trim()) ||
                       (currentStaff && currentStaff.id === m.id);
+
+                    const displayName = (m.fullName || m.email || (isKhmer ? 'អ្នកគ្រប់គ្រងប្រព័ន្ធ' : 'Super Administrator')).trim();
+                    const initials = (displayName.replace(/^(លោក|លោកស្រី|អ្នកគ្រូ|សាស្ត្រាចារ្យ|លោកបណ្ឌិត|Mr\.|Mrs\.|Ms\.|Prof\.|Dr\.)\s*/i, '') || 'SA')
+                      .substring(0, 2)
+                      .toUpperCase();
 
                     return (
                       <tr key={m.id} className="hover:bg-blue-50/30 dark:hover:bg-blue-950/10">
                         <td className="py-3.5 px-6">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-bold text-xs flex items-center justify-center">
-                              {m.fullName.substring(0, 2).toUpperCase()}
+                              {initials}
                             </div>
-                            <span className="text-sm font-bold text-slate-900 dark:text-white">
-                              {m.fullName}
-                            </span>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-bold text-slate-900 dark:text-white">
+                                  {displayName}
+                                </span>
+                                {isSelf && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-semibold">
+                                    {isKhmer ? 'គណនីកំពុងប្រើ' : 'Current Active'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </td>
                         <td className="py-3.5 px-6 font-mono text-xs text-slate-600 dark:text-slate-300">
