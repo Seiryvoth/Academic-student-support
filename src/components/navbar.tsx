@@ -19,36 +19,37 @@ import {
   ChevronRight,
   ShieldCheck,
   Users,
+  UserPlus,
+  Crown,
+  BookOpen,
+  Sparkles,
 } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
-import { getCurrentStaffSession, setCurrentStaffSession, StaffAccount } from '@/lib/data-store';
+import { useAuth } from '@/context/auth-context';
+import { StaffAccount } from '@/lib/data-store';
+import { SignInModal } from '@/components/auth/SignInModal';
+import { SignUpModal } from '@/components/auth/SignUpModal';
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
   const { language, setLanguage, t, isKhmer } = useLanguage();
+  const { staffSession, logout, isLoading } = useAuth();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [staffSession, setStaffSession] = useState<StaffAccount | null>(null);
+
+  // Modals state
+  const [signInOpen, setSignInOpen] = useState(false);
+  const [signUpOpen, setSignUpOpen] = useState(false);
 
   const isDark = mounted && (resolvedTheme ? resolvedTheme === 'dark' : theme === 'dark');
 
   useEffect(() => {
     setMounted(true);
-    setStaffSession(getCurrentStaffSession());
+  }, []);
 
-    // Listen for storage changes in case of login/logout in other tabs/modals
-    const handleStorage = () => {
-      setStaffSession(getCurrentStaffSession());
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, [pathname]);
-
-  const handleLogout = () => {
-    setCurrentStaffSession(null);
-    setStaffSession(null);
-    window.location.href = '/';
+  const handleLogout = async () => {
+    await logout();
   };
 
   const navLinks = [
@@ -78,9 +79,16 @@ export const Navbar: React.FC = () => {
     setLanguage(language === 'km' ? 'en' : 'km');
   };
 
-  const toggleTheme = () => {
-    setTheme(isDark ? 'light' : 'dark');
-  };
+  const displayName = staffSession
+    ? (isKhmer ? staffSession.fullNameKm : staffSession.fullNameEn) || staffSession.email
+    : '';
+
+  const initials = staffSession
+    ? (displayName
+        .replace(/^(លោក|លោកស្រី|អ្នកគ្រូ|សាស្ត្រាចារ្យ|លោកបណ្ឌិត|Mr\.|Mrs\.|Ms\.|Prof\.|Dr\.)\s*/i, '') || 'U')
+        .substring(0, 2)
+        .toUpperCase()
+    : 'U';
 
   return (
     <>
@@ -115,7 +123,6 @@ export const Navbar: React.FC = () => {
             <nav className="hidden lg:flex items-center gap-1.5">
               {navLinks.map((item) => {
                 const isActive = pathname === item.href || (item.href === '/videos' && pathname === '/hub');
-                const IconComponent = item.icon;
                 return (
                   <Link
                     key={item.href}
@@ -137,13 +144,13 @@ export const Navbar: React.FC = () => {
               })}
             </nav>
 
-            {/* 3. Utility Controls (Right Side) */}
+            {/* 3. Utility Controls & Auth Area (Right Side) */}
             <div className="flex items-center gap-2">
               {/* Language Switcher Toggle */}
               <button
                 onClick={toggleLanguage}
                 aria-label="Toggle language"
-                className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all shadow-2xs flex items-center gap-1.5 active:scale-95"
+                className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 cursor-pointer"
               >
                 {language === 'km' ? (
                   <>
@@ -162,95 +169,161 @@ export const Navbar: React.FC = () => {
                 )}
               </button>
 
-              {/* Theme Switcher (Segmented Light / Dark Mode Toggle) */}
+              {/* Theme Switcher Toggle */}
               <div
                 role="group"
                 aria-label="Theme mode switcher"
-                className="flex items-center p-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/90 shadow-2xs"
+                className="hidden sm:flex items-center p-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/90 shadow-2xs"
               >
-                {/* Light Mode Option */}
                 <button
                   type="button"
                   onClick={() => setTheme('light')}
                   aria-pressed={mounted && !isDark}
-                  aria-label={isKhmer ? 'ប្ដូរទៅពន្លឺ (Light Mode)' : 'Switch to Light Mode'}
-                  title={isKhmer ? 'ប្ដូរទៅពន្លឺ (Light Mode)' : 'Light Mode'}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${
                     mounted && !isDark
                       ? 'bg-white text-amber-600 shadow-xs border border-slate-200/80 scale-100'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
                   }`}
                 >
                   <Sun
                     className={`w-3.5 h-3.5 transition-colors ${
-                      mounted && !isDark ? 'text-amber-500 fill-amber-400' : 'text-slate-400 dark:text-slate-400'
+                      mounted && !isDark ? 'text-amber-500 fill-amber-400' : 'text-slate-400'
                     }`}
                   />
-                  <span className="hidden sm:inline">{isKhmer ? 'ពន្លឺ' : 'Light'}</span>
+                  <span className="hidden xl:inline">{isKhmer ? 'ពន្លឺ' : 'Light'}</span>
                 </button>
 
-                {/* Dark Mode Option */}
                 <button
                   type="button"
                   onClick={() => setTheme('dark')}
                   aria-pressed={mounted && isDark}
-                  aria-label={isKhmer ? 'ប្ដូរទៅងងឹត (Dark Mode)' : 'Switch to Dark Mode'}
-                  title={isKhmer ? 'ប្ដូរទៅងងឹត (Dark Mode)' : 'Dark Mode'}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${
                     mounted && isDark
                       ? 'bg-slate-900 text-indigo-300 shadow-xs border border-indigo-500/30 scale-100'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
                   }`}
                 >
                   <Moon
                     className={`w-3.5 h-3.5 transition-colors ${
-                      mounted && isDark ? 'text-indigo-400 fill-indigo-400' : 'text-slate-400 dark:text-slate-400'
+                      mounted && isDark ? 'text-indigo-400 fill-indigo-400' : 'text-slate-400'
                     }`}
                   />
-                  <span className="hidden sm:inline">{isKhmer ? 'ងងឹត' : 'Dark'}</span>
+                  <span className="hidden xl:inline">{isKhmer ? 'ងងឹត' : 'Dark'}</span>
                 </button>
               </div>
 
-              {/* Staff Access / Login Button */}
-              {staffSession ? (
+              {/* AUTH AREA */}
+              {!mounted || (isLoading && !staffSession) ? (
                 <div className="hidden sm:flex items-center gap-2">
+                  <div className="w-20 h-7 rounded-xl bg-slate-200/70 dark:bg-slate-800/70 animate-pulse" />
+                  <div className="w-20 h-7 rounded-xl bg-slate-200/70 dark:bg-slate-800/70 animate-pulse" />
+                </div>
+              ) : staffSession ? (
+                /* Authenticated User View: Avatar, Full Name, Role Badge, Logout */
+                <div className="hidden sm:flex items-center gap-2.5">
+                  {/* Super Admin Quick Link: Teams */}
                   {staffSession.role === 'super_admin' && (
                     <Link
                       href="/admin/team-management"
-                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all shadow-2xs"
-                      title={isKhmer ? 'គ្រប់គ្រងក្រុមការងារ & គណនី' : 'Subject Team & Account Management'}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 hover:bg-indigo-100 transition-all shadow-2xs"
+                      title={isKhmer ? 'គ្រប់គ្រងក្រុមការងារ & គណនី' : 'Subject Team Management'}
                     >
-                      <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                      <span>{isKhmer ? 'ក្រុមការងារ' : 'Teams'}</span>
+                      <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span className="hidden md:inline">{isKhmer ? 'ក្រុមការងារ' : 'Teams'}</span>
                     </Link>
                   )}
-                  <Link
-                    href="/dashboard"
-                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>{isKhmer ? 'ផ្ទាំងគ្រូ' : 'Dashboard'}</span>
-                    <span className="text-[10px] uppercase font-bold px-1 rounded-sm bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100">
-                      {staffSession.role === 'super_admin' ? 'Admin' : staffSession.subjectAssigned}
-                    </span>
-                  </Link>
-                  <button
-                    onClick={handleLogout}
-                    title={t('logout')}
-                    aria-label="Sign out"
-                    className="p-1.5 rounded-xl border border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                  </button>
+
+                  {/* Staff Dashboard Link */}
+                  {staffSession.role !== 'student' && (
+                    <Link
+                      href="/dashboard"
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 hover:bg-emerald-100 transition-all shadow-2xs"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="hidden md:inline">{isKhmer ? 'ផ្ទាំងគ្រូ' : 'Dashboard'}</span>
+                    </Link>
+                  )}
+
+                  {/* User Profile Component */}
+                  <div className="flex items-center gap-2 pl-1.5 border-l border-slate-200 dark:border-slate-700">
+                    {/* User Avatar */}
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs shadow-xs shrink-0 ${
+                        staffSession.role === 'super_admin'
+                          ? 'bg-gradient-to-tr from-indigo-600 to-purple-600 ring-2 ring-indigo-400/30'
+                          : staffSession.role === 'subject_lead'
+                          ? 'bg-gradient-to-tr from-blue-600 to-sky-600 ring-2 ring-blue-400/30'
+                          : staffSession.role === 'subject_member'
+                          ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 ring-2 ring-emerald-400/30'
+                          : 'bg-gradient-to-tr from-amber-500 to-orange-500 ring-2 ring-amber-400/30'
+                      }`}
+                      title={displayName}
+                    >
+                      {initials}
+                    </div>
+
+                    {/* Name & Role Badge */}
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[95px] lg:max-w-[130px] leading-tight">
+                        {displayName}
+                      </span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {staffSession.role === 'super_admin' ? (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-wide uppercase bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                            <Crown className="w-2.5 h-2.5" />
+                            <span>Super Admin</span>
+                          </span>
+                        ) : staffSession.role === 'subject_lead' ? (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-wide uppercase bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            <UserCheck className="w-2.5 h-2.5" />
+                            <span>{isKhmer ? 'ប្រធាន' : 'Lead'}</span>
+                          </span>
+                        ) : staffSession.role === 'subject_member' ? (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-wide uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            <BookOpen className="w-2.5 h-2.5" />
+                            <span>{isKhmer ? 'សមាជិក' : 'Member'}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-black tracking-wide uppercase bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            <GraduationCap className="w-2.5 h-2.5" />
+                            <span>{isKhmer ? 'សិស្ស' : 'Student'}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Log Out button */}
+                    <button
+                      onClick={handleLogout}
+                      title={isKhmer ? 'ចាកចេញ' : 'Log Out'}
+                      aria-label="Log Out"
+                      className="ml-1 p-1.5 rounded-xl border border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <Link
-                  href="/login"
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all shadow-2xs"
-                >
-                  <Lock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span>{isKhmer ? '🔐 ចូលប្រព័ន្ធគ្រូ' : '🔐 Staff Login'}</span>
-                </Link>
+                /* Unauthenticated View: "Sign In / ចូលគណនី" and "Sign Up / ចុះឈ្មោះ" */
+                <div className="hidden sm:flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSignInOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all shadow-2xs cursor-pointer"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>{isKhmer ? 'ចូលគណនី' : 'Sign In'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSignUpOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-600 hover:from-blue-700 hover:to-sky-700 shadow-sm shadow-blue-500/20 transition-all cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>{isKhmer ? 'ចុះឈ្មោះ' : 'Sign Up'}</span>
+                  </button>
+                </div>
               )}
 
               {/* Mobile Drawer Trigger */}
@@ -268,6 +341,7 @@ export const Navbar: React.FC = () => {
         {/* Mobile Menu Dropdown */}
         {mobileMenuOpen && (
           <div className="lg:hidden px-4 pt-2 pb-5 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 backdrop-blur-xl animate-in slide-in-from-top-2 duration-200">
+            {/* Primary Nav Links */}
             <div className="space-y-1.5 mb-4">
               {navLinks.map((item) => {
                 const isActive = pathname === item.href;
@@ -296,7 +370,6 @@ export const Navbar: React.FC = () => {
             {/* Mobile Language & Theme Quick Switchers */}
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2 mb-3">
               <div className="flex items-center gap-2">
-                {/* Language Switch */}
                 <button
                   onClick={toggleLanguage}
                   className="py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-center gap-1.5 shadow-xs"
@@ -305,7 +378,6 @@ export const Navbar: React.FC = () => {
                   <span>{language === 'km' ? 'ខ្មែរ' : 'EN'}</span>
                 </button>
 
-                {/* Theme Switcher Segmented Control in Mobile */}
                 <div
                   role="group"
                   aria-label="Theme mode switcher"
@@ -342,9 +414,30 @@ export const Navbar: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2">
+            {/* Mobile Auth Actions */}
+            <div className="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
               {staffSession ? (
                 <>
+                  {/* User Profile Card */}
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                        {initials}
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                          {displayName}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {staffSession.email}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                      {staffSession.role}
+                    </span>
+                  </div>
+
                   {staffSession.role === 'super_admin' && (
                     <Link
                       href="/admin/team-management"
@@ -360,43 +453,64 @@ export const Navbar: React.FC = () => {
                       </span>
                     </Link>
                   )}
-                  <Link
-                    href="/dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800"
-                  >
-                    <div className="flex items-center gap-2">
-                      <UserCheck className="w-4 h-4" />
-                      <span>{isKhmer ? 'ផ្ទាំងគ្រប់គ្រងគ្រូ' : 'Staff Dashboard'}</span>
-                    </div>
-                    <span className="text-xs uppercase font-bold px-2 py-0.5 rounded-md bg-emerald-200 dark:bg-emerald-800">
-                      {staffSession.role === 'super_admin' ? 'Admin' : staffSession.subjectAssigned}
-                    </span>
-                  </Link>
+
+                  {staffSession.role !== 'student' && (
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800"
+                    >
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="w-4 h-4" />
+                        <span>{isKhmer ? 'ផ្ទាំងគ្រប់គ្រងគ្រូ' : 'Staff Dashboard'}</span>
+                      </div>
+                    </Link>
+                  )}
+
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900"
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 cursor-pointer"
                   >
                     <LogOut className="w-4 h-4" />
-                    <span>{t('logout')}</span>
+                    <span>{isKhmer ? 'ចាកចេញ' : 'Log Out'}</span>
                   </button>
                 </>
+              ) : !mounted || (isLoading && !staffSession) ? (
+                <div className="h-10 w-full rounded-xl bg-slate-200/70 dark:bg-slate-800/70 animate-pulse" />
               ) : (
-                <Link
-                  href="/login"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 shadow-sm"
-                >
-                  <Lock className="w-4 h-4" />
-                  <span>{isKhmer ? 'ចូលប្រព័ន្ធគ្រូ (Staff Login)' : 'Staff Login'}</span>
-                </Link>
+                /* Unauthenticated Mobile Actions */
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setSignInOpen(true);
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 cursor-pointer"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-blue-600" />
+                    <span>{isKhmer ? 'ចូលគណនី' : 'Sign In'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setSignUpOpen(true);
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 shadow-sm cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>{isKhmer ? 'ចុះឈ្មោះ' : 'Sign Up'}</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
         )}
       </header>
 
-      {/* Mobile Sticky Bottom Bar (Video Lessons & Practice MCQ are always 1 tap away) */}
+      {/* Sticky Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-3 py-2 shadow-lg">
         <div className="flex items-center justify-around gap-1">
           <Link
@@ -437,31 +551,48 @@ export const Navbar: React.FC = () => {
 
           {staffSession ? (
             <Link
-              href="/dashboard"
+              href={staffSession.role === 'super_admin' ? '/admin/team-management' : '/dashboard'}
               className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
-                pathname === '/dashboard'
-                  ? 'text-emerald-600 dark:text-emerald-400 font-bold'
-                  : 'text-slate-600 dark:text-slate-400 font-medium'
-              }`}
-            >
-              <ShieldCheck className="w-5 h-5" />
-              <span className="text-[10px] mt-0.5">{isKhmer ? 'ផ្ទាំងគ្រូ' : 'Admin'}</span>
-            </Link>
-          ) : (
-            <Link
-              href="/login"
-              className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors ${
-                pathname === '/login'
+                pathname.startsWith('/admin') || pathname === '/dashboard'
                   ? 'text-blue-600 dark:text-blue-400 font-bold'
                   : 'text-slate-600 dark:text-slate-400 font-medium'
               }`}
             >
-              <Lock className="w-5 h-5" />
-              <span className="text-[10px] mt-0.5">{isKhmer ? 'គ្រូ' : 'Staff'}</span>
+              <ShieldCheck className="w-5 h-5" />
+              <span className="text-[10px] mt-0.5">
+                {staffSession.role === 'super_admin' ? 'Admin' : 'Dashboard'}
+              </span>
             </Link>
+          ) : (
+            <button
+              onClick={() => setSignInOpen(true)}
+              className="flex flex-col items-center py-1 px-3 rounded-xl text-slate-600 dark:text-slate-400 font-medium cursor-pointer"
+            >
+              <Lock className="w-5 h-5" />
+              <span className="text-[10px] mt-0.5">{isKhmer ? 'ចូលគណនី' : 'Sign In'}</span>
+            </button>
           )}
         </div>
       </div>
+
+      {/* Auth Modals */}
+      <SignInModal
+        isOpen={signInOpen}
+        onClose={() => setSignInOpen(false)}
+        onSwitchToSignUp={() => {
+          setSignInOpen(false);
+          setSignUpOpen(true);
+        }}
+      />
+
+      <SignUpModal
+        isOpen={signUpOpen}
+        onClose={() => setSignUpOpen(false)}
+        onSwitchToSignIn={() => {
+          setSignUpOpen(false);
+          setSignInOpen(true);
+        }}
+      />
     </>
   );
 };

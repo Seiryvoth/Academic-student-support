@@ -13,19 +13,24 @@ import {
   Sparkles,
   Loader2,
   AlertCircle,
+  UserPlus,
 } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
+import { useAuth } from '@/context/auth-context';
 import { INITIAL_STAFF_ACCOUNTS, getStoredStaff, setCurrentStaffSession, StaffAccount } from '@/lib/data-store';
 import { SUBJECTS, SubjectId } from '@/lib/curriculum-data';
+import { SignUpModal } from '@/components/auth/SignUpModal';
 
 export default function LoginPage() {
   const router = useRouter();
   const { t, isKhmer } = useLanguage();
+  const { login } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signUpOpen, setSignUpOpen] = useState(false);
 
   // Check if we are running in local development mode
   const isDevelopment =
@@ -38,15 +43,17 @@ export default function LoginPage() {
    * - Subject Lead -> /dashboard?subject=<assigned_subject> (Locked to their specific subject panel)
    */
   const handleRedirectAndSave = (account: StaffAccount) => {
-    setCurrentStaffSession(account);
+    login(account);
 
     if (account.role === 'super_admin') {
-      router.push('/dashboard');
+      router.push('/admin/team-management');
     } else if (
       (account.role === 'subject_lead' || account.role === 'subject_member') &&
       account.subjectAssigned
     ) {
       router.push(`/dashboard?subject=${account.subjectAssigned}`);
+    } else if (account.role === 'student') {
+      router.push('/practice');
     } else {
       router.push('/dashboard');
     }
@@ -169,13 +176,26 @@ export default function LoginPage() {
           }
 
           if (profileRecord) {
-            // Guardrail: Student accounts are not staff
-            if (profileRecord.role === 'student') {
+            // Check approval status
+            const accountStatus = (profileRecord.status || 'approved').toString().toLowerCase();
+
+            if (accountStatus === 'pending') {
               await supabase.auth.signOut();
               setError(
                 isKhmer
-                  ? 'គណនីសិស្សមិនចាំបាច់ចូលក្នុងផ្ទាំងគ្រប់គ្រងគ្រូទេ។ អ្នកអាចចូលរៀនមេរៀន និងធ្វើលំហាត់បានដោយសេរីនៅទំព័រដើម។'
-                  : 'Student accounts do not require staff login. You can freely access video lessons and exercises from the homepage.'
+                  ? 'គណនីរបស់អ្នកកំពុងរង់ចាំការអនុម័ត / Your account is pending approval.'
+                  : 'Your account is pending approval. Please wait for Super Admin verification.'
+              );
+              setLoading(false);
+              return;
+            }
+
+            if (accountStatus === 'rejected') {
+              await supabase.auth.signOut();
+              setError(
+                isKhmer
+                  ? 'គណនីរបស់អ្នកត្រូវបានបដិសេធ / Your account has been rejected.'
+                  : 'Your account has been rejected. Please contact administration.'
               );
               setLoading(false);
               return;
@@ -184,11 +204,15 @@ export default function LoginPage() {
             const staffAccount: StaffAccount = {
               id: profileRecord.id,
               email: profileRecord.email || cleanEmail,
-              fullNameKm: profileRecord.full_name || 'គ្រូបង្រៀន MoEYS',
-              fullNameEn: profileRecord.full_name || 'MoEYS Staff',
-              role: profileRecord.role as 'super_admin' | 'subject_lead' | 'subject_member',
-              subjectAssigned: profileRecord.role === 'super_admin' ? null : assignedSubjectCode,
+              fullNameKm: profileRecord.full_name || 'អ្នកប្រើប្រាស់ MoEYS',
+              fullNameEn: profileRecord.full_name || 'MoEYS User',
+              role: profileRecord.role as 'super_admin' | 'subject_lead' | 'subject_member' | 'student',
+              subjectAssigned:
+                profileRecord.role === 'super_admin' || profileRecord.role === 'student'
+                  ? null
+                  : assignedSubjectCode,
               isActive: true,
+              status: 'approved',
               createdAt: profileRecord.created_at || new Date().toISOString(),
             };
 
@@ -406,7 +430,26 @@ export default function LoginPage() {
                 </>
               )}
             </button>
+
+            {/* Link to open Sign Up Modal */}
+            <div className="text-center pt-2 text-xs text-slate-600 dark:text-slate-400">
+              {isKhmer ? 'មិនទាន់មានគណនីមែនទេ?' : "Don't have an account yet?"}{' '}
+              <button
+                type="button"
+                onClick={() => setSignUpOpen(true)}
+                className="font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer ml-1 inline-flex items-center gap-1"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>{isKhmer ? 'ចុះឈ្មោះគណនីថ្មី (Sign Up)' : 'Sign up here'}</span>
+              </button>
+            </div>
           </form>
+
+          <SignUpModal
+            isOpen={signUpOpen}
+            onClose={() => setSignUpOpen(false)}
+            onSwitchToSignIn={() => setSignUpOpen(false)}
+          />
 
           {/* Quick 1-Click Access for Demo / Testing (DEVELOPMENT ENVIRONMENT ONLY) */}
           {isDevelopment && (

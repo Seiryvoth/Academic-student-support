@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { SubjectId, GradeLevel, LessonItem } from '@/lib/curriculum-data';
 import { getCurrentStaffSession, canManageSubject, StaffAccount } from '@/lib/data-store';
 import { useLanguage } from '@/context/language-context';
+import { useAuth } from '@/context/auth-context';
 
 export interface LessonToolbarProps {
   selectedLesson: LessonItem | null;
@@ -20,24 +21,8 @@ export interface LessonToolbarProps {
  * Hook to reactively track whether current session has permission to manage lessons for this subject
  */
 export function useCanManageLessons(subject: SubjectId): boolean {
-  const [staff, setStaff] = useState<StaffAccount | null>(null);
-
-  useEffect(() => {
-    setStaff(getCurrentStaffSession());
-
-    const handleAuthChange = () => {
-      setStaff(getCurrentStaffSession());
-    };
-
-    window.addEventListener('storage', handleAuthChange);
-    window.addEventListener('moeys_staff_auth_changed', handleAuthChange);
-    return () => {
-      window.removeEventListener('storage', handleAuthChange);
-      window.removeEventListener('moeys_staff_auth_changed', handleAuthChange);
-    };
-  }, []);
-
-  return canManageSubject(staff, subject);
+  const { staffSession } = useAuth();
+  return canManageSubject(staffSession, subject);
 }
 
 export const LessonToolbar: React.FC<LessonToolbarProps> = ({

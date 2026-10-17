@@ -9,6 +9,7 @@ export interface SubjectTeamMember {
   email: string;
   fullName: string;
   role: 'super_admin' | 'subject_lead' | 'subject_member' | 'student';
+  status: 'pending' | 'approved' | 'rejected';
   assignedSubjectId: SubjectId | string | null;
   assignedSubjectCode?: SubjectId | null;
   subjectNameKm?: string;
@@ -34,6 +35,38 @@ const UUID_TO_SUBJECT: Record<string, SubjectId> = {
   'a0000000-0000-0000-0000-000000000004': 'biology',
   'a0000000-0000-0000-0000-000000000005': 'english',
 };
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export const SUBJECT_TO_UUID: Record<string, string> = {
+  'math': 'a0000000-0000-0000-0000-000000000001',
+  'physics': 'a0000000-0000-0000-0000-000000000002',
+  'chemistry': 'a0000000-0000-0000-0000-000000000003',
+  'biology': 'a0000000-0000-0000-0000-000000000004',
+  'english': 'a0000000-0000-0000-0000-000000000005',
+};
+
+/**
+ * Universal Subject UUID Resolver:
+ * Converts subject code ('math'), UUID, or empty string to canonical UUID or null.
+ * Prevents PostgreSQL 400 Bad Request error (invalid input syntax for type uuid: "math").
+ */
+export function resolveCanonicalSubjectUuid(
+  subjectRef: string | null | undefined,
+  role?: string
+): string | null {
+  if (role === 'super_admin') return null;
+  if (!subjectRef) return null;
+  const str = String(subjectRef).trim();
+  if (!str || str === '' || str.toLowerCase() === 'null' || str.toLowerCase() === 'undefined') {
+    return null;
+  }
+  const lower = str.toLowerCase();
+  if (SUBJECT_TO_UUID[lower]) return SUBJECT_TO_UUID[lower];
+  if (UUID_REGEX.test(str)) return str;
+  return null;
+}
 
 /**
  * Universal Subject Code Resolver:
@@ -91,8 +124,9 @@ export function getStoredTeamMembers(): SubjectTeamMember[] {
       // Filter out any legacy mock accounts
       const realOnly = parsed
         .filter((m: any) => !isMockMember(m))
-        .map((m: SubjectTeamMember) => ({
+        .map((m: any) => ({
           ...m,
+          status: m.status || 'approved',
           assignedSubjectCode: m.assignedSubjectCode || resolveSubjectCode(m.assignedSubjectId),
         }));
       return realOnly;
@@ -112,10 +146,15 @@ export function saveStoredTeamMembers(members: SubjectTeamMember[]): void {
     const cleanMembers = members.filter((m) => !isMockMember(m));
     const enriched = cleanMembers.map((m) => ({
       ...m,
+      status: m.status || 'approved',
       assignedSubjectCode: m.assignedSubjectCode || resolveSubjectCode(m.assignedSubjectId),
     }));
 
-    localStorage.setItem(STORAGE_KEY_TEAM_MEMBERS, JSON.stringify(enriched));
+    const nextStr = JSON.stringify(enriched);
+    const prevStr = localStorage.getItem(STORAGE_KEY_TEAM_MEMBERS);
+    if (prevStr === nextStr) return; // Prevent infinite re-render loop
+
+    localStorage.setItem(STORAGE_KEY_TEAM_MEMBERS, nextStr);
 
     // Synchronize with general staff accounts store so dashboard reflects real changes
     const staffAccounts: StaffAccount[] = enriched.map((m) => {
@@ -127,14 +166,14 @@ export function saveStoredTeamMembers(members: SubjectTeamMember[]): void {
         fullNameEn: m.fullName,
         role: m.role,
         subjectAssigned: m.role === 'super_admin' ? null : subjectAssigned,
-        isActive: true,
+        isActive: m.status === 'approved',
+        status: m.status,
         createdAt: m.createdAt,
       };
     });
     saveStoredStaff(staffAccounts);
 
     window.dispatchEvent(new Event('moeys-team-updated'));
-    window.dispatchEvent(new Event('storage'));
   } catch (err) {
     console.error('Error saving team members:', err);
   }
@@ -177,17 +216,19 @@ export async function fetchTeamFromApi(): Promise<{
 }> {
   let clientProfiles: any[] = [];
 
-  // 1. Direct client query via Supabase SDK if available (handles client session & logs RLS errors)
+  // 1. Direct client query via Supabase SDK if available
   if (typeof window !== 'undefined' && isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase.from('profiles').select('*');
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, status, assigned_subject_id, created_at, updated_at');
       if (error) {
-        console.error('[Supabase RLS Error] Failed to query public.profiles client-side:', error.message, error);
+        console.error('Supabase Error Details:', error);
       } else if (Array.isArray(data)) {
         clientProfiles = data;
       }
     } catch (clientErr) {
-      console.error('[Supabase Client Error] Unexpected exception selecting profiles:', clientErr);
+      console.error('Supabase Error Details:', clientErr);
     }
   }
 
@@ -238,12 +279,14 @@ export async function fetchTeamFromApi(): Promise<{
               : 'subject_member';
 
           const fullName = (u.full_name || u.fullName || u.email || 'MoEYS Staff').toString().trim();
+          const status = (u.status || 'approved').toString().toLowerCase() as 'pending' | 'approved' | 'rejected';
 
           return {
             id: u.id || u.user_id || u.email,
             email: u.email || '',
             fullName: fullName,
             role: role,
+            status: ['pending', 'approved', 'rejected'].includes(status) ? status : 'approved',
             assignedSubjectId: rawSubj,
             assignedSubjectCode: subjCode,
             subjectNameKm: u.subject_name_km || (u.subjects && u.subjects.name_km),
@@ -272,12 +315,16 @@ export async function fetchTeamFromApi(): Promise<{
             ? 'super_admin'
             : rawRole === 'subject_lead'
             ? 'subject_lead'
+            : rawRole === 'student'
+            ? 'student'
             : 'subject_member';
+        const status = (u.status || 'approved').toString().toLowerCase() as 'pending' | 'approved' | 'rejected';
         return {
           id: u.id,
           email: u.email,
           fullName: (u.full_name || u.email || 'Staff').trim(),
           role: role as any,
+          status: ['pending', 'approved', 'rejected'].includes(status) ? status : 'approved',
           assignedSubjectId: u.assigned_subject_id,
           assignedSubjectCode: resolveSubjectCode(u.assigned_subject_id),
           createdAt: u.created_at || new Date().toISOString(),
@@ -316,6 +363,7 @@ export async function fetchTeamMemberByIdApi(userId: string): Promise<SubjectTea
           email: u.email,
           fullName: u.full_name || u.email,
           role: u.role,
+          status: u.status || 'approved',
           assignedSubjectId: rawSubj,
           assignedSubjectCode: subjCode,
           subjectNameKm: u.subject_name_km,
@@ -348,39 +396,51 @@ export async function createTeamMemberApi(payload: {
   password: string;
   full_name: string;
   role: 'super_admin' | 'subject_lead' | 'subject_member' | 'student';
+  status?: 'pending' | 'approved' | 'rejected';
   assigned_subject_id: string | null;
   subject_code?: string;
 }): Promise<SubjectTeamMember> {
   const headers = await getAuthHeaders();
+  const cleanSubjectId = resolveCanonicalSubjectUuid(payload.assigned_subject_id, payload.role);
+
   const res = await fetch('/api/admin/users', {
     method: 'POST',
     headers,
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      email: payload.email,
+      password: payload.password,
+      full_name: payload.full_name,
+      role: payload.role,
+      assigned_subject_id: cleanSubjectId,
+    }),
   });
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error || `Failed to create member (${res.status})`);
+    const errorMessage = errData.error || `Failed to create member (${res.status})`;
+    console.error('[createTeamMemberApi Error]:', errorMessage);
+    throw new Error(errorMessage);
   }
 
   const resData = await res.json();
   const u = resData.user || {};
-  const rawSubj = u.assigned_subject_id || payload.assigned_subject_id || null;
+  const rawSubj = u.assigned_subject_id || cleanSubjectId;
   const subjCode =
     u.assigned_subject_code || (payload.subject_code as SubjectId) || resolveSubjectCode(rawSubj);
 
   const newMember: SubjectTeamMember = {
-    id: u.id || `staff-${Date.now()}`,
-    email: payload.email,
-    fullName: payload.full_name,
-    role: payload.role,
+    id: u.id,
+    email: u.email || payload.email,
+    fullName: u.full_name || payload.full_name,
+    role: u.role || payload.role,
+    status: u.status || 'approved',
     assignedSubjectId: rawSubj,
     assignedSubjectCode: subjCode,
     createdAt: u.created_at || new Date().toISOString(),
     updatedAt: u.updated_at,
   };
 
-  // Optimistic local state update
+  // Only update local storage on verified successful API response
   const current = getStoredTeamMembers();
   const updated = [
     newMember,
@@ -400,14 +460,28 @@ export async function updateTeamMemberApi(payload: {
   password?: string;
   full_name?: string;
   role?: 'super_admin' | 'subject_lead' | 'subject_member' | 'student';
+  status?: 'pending' | 'approved' | 'rejected';
   assigned_subject_id?: string | null;
   subject_code?: string;
 }): Promise<SubjectTeamMember> {
   const headers = await getAuthHeaders();
+  const cleanSubjectId =
+    payload.assigned_subject_id !== undefined
+      ? resolveCanonicalSubjectUuid(payload.assigned_subject_id, payload.role)
+      : undefined;
+
   const res = await fetch('/api/admin/users', {
     method: 'PUT',
     headers,
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      user_id: payload.user_id,
+      email: payload.email,
+      password: payload.password,
+      full_name: payload.full_name,
+      role: payload.role,
+      status: payload.status,
+      assigned_subject_id: cleanSubjectId,
+    }),
   });
 
   if (!res.ok) {
@@ -438,6 +512,7 @@ export async function updateTeamMemberApi(payload: {
     email: payload.email || u.email || existing?.email || '',
     fullName: payload.full_name || u.full_name || existing?.fullName || '',
     role: payload.role || u.role || existing?.role || 'subject_member',
+    status: payload.status || u.status || existing?.status || 'approved',
     assignedSubjectId: rawSubj,
     assignedSubjectCode: payload.role === 'super_admin' ? null : subjCode,
     createdAt: existing?.createdAt || u.created_at || new Date().toISOString(),
@@ -448,6 +523,48 @@ export async function updateTeamMemberApi(payload: {
   saveStoredTeamMembers(updatedList);
 
   return updatedMember;
+}
+
+/**
+ * Approves a pending user account
+ */
+export async function approveUserApi(userId: string): Promise<SubjectTeamMember> {
+  return updateTeamMemberApi({
+    user_id: userId,
+    status: 'approved',
+  });
+}
+
+/**
+ * Rejects a pending user account
+ */
+export async function rejectUserApi(userId: string): Promise<SubjectTeamMember> {
+  return updateTeamMemberApi({
+    user_id: userId,
+    status: 'rejected',
+  });
+}
+
+/**
+ * Resets a user's password directly via Admin API
+ */
+export async function resetUserPasswordApi(userId: string, newPassword: string): Promise<boolean> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/users', {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      user_id: userId,
+      password: newPassword,
+    }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `Failed to reset password (${res.status})`);
+  }
+
+  return true;
 }
 
 /**

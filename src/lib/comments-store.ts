@@ -243,7 +243,6 @@ export function subscribeToComments(onUpdate: () => void): () => void {
   const handleUpdate = () => onUpdate();
   window.addEventListener('moeys_comment_updated', handleUpdate);
   window.addEventListener('moeys_comment_added', handleUpdate);
-  window.addEventListener('storage', handleUpdate);
 
   // Supabase Realtime channel subscription
   let realtimeChannel: any = null;
@@ -267,7 +266,6 @@ export function subscribeToComments(onUpdate: () => void): () => void {
   return () => {
     window.removeEventListener('moeys_comment_updated', handleUpdate);
     window.removeEventListener('moeys_comment_added', handleUpdate);
-    window.removeEventListener('storage', handleUpdate);
     if (realtimeChannel && supabase) {
       try {
         supabase.removeChannel(realtimeChannel);

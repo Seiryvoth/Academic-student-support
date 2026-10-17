@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin, verifySuperAdmin } from '@/lib/supabase-admin';
+import {
+  dynamicUserCache,
+  addCachedUser,
+  updateCachedUser,
+  deleteCachedUser,
+  CachedProfile,
+} from '@/lib/dynamic-user-cache';
 
 // Helper: UUID validator
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Canonical 5 subjects UUID mapping
+const CANONICAL_SUBJECT_UUIDS: Record<string, string> = {
+  'math': 'a0000000-0000-0000-0000-000000000001',
+  'physics': 'a0000000-0000-0000-0000-000000000002',
+  'chemistry': 'a0000000-0000-0000-0000-000000000003',
+  'biology': 'a0000000-0000-0000-0000-000000000004',
+  'english': 'a0000000-0000-0000-0000-000000000005',
+};
 
 // Standard core 5 subjects fallback mapping
 const CORE_SUBJECT_MAP: Record<string, { code: string; name_km: string; name_en: string }> = {
@@ -16,13 +32,49 @@ const CORE_SUBJECT_MAP: Record<string, { code: string; name_km: string; name_en:
   'a0000000-0000-0000-0000-000000000002': { code: 'physics', name_km: 'រូបវិទ្យា', name_en: 'Physics' },
   'a0000000-0000-0000-0000-000000000003': { code: 'chemistry', name_km: 'គីមីវិទ្យា', name_en: 'Chemistry' },
   'a0000000-0000-0000-0000-000000000004': { code: 'biology', name_km: 'ជីវវិទ្យា', name_en: 'Biology' },
+  'a0000000-0000-0000-0000-000000000005': { code: 'english', name_km: 'ភាសាអង់គ្លេស', name_en: 'English' },
 };
-// Live in-memory cache for dynamic user accounts
-const DYNAMIC_USERS = new Map<string, any>();
+
+/**
+ * Validates and converts assigned_subject_id to a valid UUID or null.
+ * Strictly conforms to PostgreSQL public.profiles.assigned_subject_id (UUID nullable).
+ * If assigned_subject_id is empty string "", invalid format, or role is super_admin,
+ * converts to null to strictly prevent HTTP 400 Bad Request error (code 22P02).
+ */
+export function sanitizeAssignedSubjectId(
+  subjectRef: unknown,
+  role?: string
+): { subjectId: string | null; subjectCode: string } {
+  if (role === 'super_admin') {
+    return { subjectId: null, subjectCode: '' };
+  }
+
+  if (subjectRef === null || subjectRef === undefined) {
+    return { subjectId: null, subjectCode: 'math' };
+  }
+
+  const str = String(subjectRef).trim();
+  if (!str || str === '' || str.toLowerCase() === 'null' || str.toLowerCase() === 'undefined') {
+    return { subjectId: null, subjectCode: 'math' };
+  }
+
+  const lower = str.toLowerCase();
+  if (CANONICAL_SUBJECT_UUIDS[lower]) {
+    return { subjectId: CANONICAL_SUBJECT_UUIDS[lower], subjectCode: lower };
+  }
+
+  if (UUID_REGEX.test(str)) {
+    const code = CORE_SUBJECT_MAP[lower]?.code || 'math';
+    return { subjectId: str, subjectCode: code };
+  }
+
+  // Any non-UUID string or invalid format is safely converted to null
+  return { subjectId: null, subjectCode: 'math' };
+}
 
 /**
  * GET /api/admin/users
- * Returns list of team members/profiles directly from Supabase public.profiles joined with public.subjects,
+ * Returns list of team members/profiles directly from Supabase public.profiles,
  * or a single user profile when ?user_id=<id> is supplied.
  * Requires super_admin role.
  */
@@ -47,38 +99,52 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const targetUserId = url.searchParams.get('user_id');
 
-    // 1. Fetch subjects table
-    const { data: dbSubjects, error: subjError } = await admin
-      .from('subjects')
-      .select('id, code, name_km, name_en')
-      .order('code', { ascending: true });
-
-    if (subjError) {
-      console.warn('Could not fetch subjects table:', subjError.message);
-    }
-
-    const subjectsList = dbSubjects && dbSubjects.length > 0 ? dbSubjects : Object.entries(CORE_SUBJECT_MAP).slice(0, 5).map(([code, meta]) => ({
-      id: code,
+    // 1. Fetch subjects list (with fallback to canonical subjects)
+    let subjectsList = Object.entries(CORE_SUBJECT_MAP).slice(0, 5).map(([code, meta]) => ({
+      id: CANONICAL_SUBJECT_UUIDS[code] || code,
       code: meta.code,
       name_km: meta.name_km,
       name_en: meta.name_en,
     }));
 
-    // Helper: Enriches any user record with subject code and names
+    try {
+      const { data: dbSubjects, error: subjError } = await admin
+        .from('subjects')
+        .select('id, code, name_km, name_en')
+        .order('code', { ascending: true });
+
+      if (subjError) {
+        if (subjError.code !== 'PGRST205') {
+          console.error('Supabase Error Details:', subjError);
+        }
+      } else if (dbSubjects && dbSubjects.length > 0) {
+        subjectsList = dbSubjects;
+      }
+    } catch (error) {
+      console.error('Supabase Error Details:', error);
+    }
+
+    // Helper: Enriches any user record with subject code, names, and approval status
     const enrichUser = (u: any) => {
       const subjectRef = u.assigned_subject_id || u.subject_assigned || null;
-      let matchedSubject = u.subjects || subjectsList.find(
-        (s: any) => s.id === subjectRef || s.code === subjectRef
-      );
+      let matchedSubject =
+        u.subjects ||
+        subjectsList.find((s: any) => s.id === subjectRef || s.code === subjectRef);
       if (!matchedSubject && subjectRef && CORE_SUBJECT_MAP[subjectRef.toLowerCase()]) {
         matchedSubject = CORE_SUBJECT_MAP[subjectRef.toLowerCase()] as any;
       }
+
+      const rawStatus = (u.status || 'approved').toString().toLowerCase();
+      const status = ['pending', 'approved', 'rejected'].includes(rawStatus)
+        ? rawStatus
+        : 'approved';
 
       return {
         id: u.id || u.user_id,
         email: u.email,
         full_name: u.full_name || u.email,
-        role: u.role,
+        role: u.role || 'student',
+        status: status,
         assigned_subject_id: subjectRef,
         assigned_subject_code: matchedSubject ? matchedSubject.code : subjectRef,
         subject_name_km: matchedSubject ? matchedSubject.name_km : undefined,
@@ -90,9 +156,9 @@ export async function GET(request: NextRequest) {
 
     // 2. If single user lookup requested (?user_id=...)
     if (targetUserId) {
-      if (DYNAMIC_USERS.has(targetUserId)) {
-        const dyn = DYNAMIC_USERS.get(targetUserId);
-        if (!dyn._deleted) {
+      if (dynamicUserCache.has(targetUserId)) {
+        const dyn = dynamicUserCache.get(targetUserId);
+        if (dyn && !dyn._deleted) {
           return NextResponse.json({
             user: enrichUser(dyn),
             subjects: subjectsList,
@@ -100,53 +166,31 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // First try join query
-      const { data: singleJoined } = await admin
-        .from('profiles')
-        .select(`
-          id,
-          full_name,
-          email,
-          role,
-          assigned_subject_id,
-          created_at,
-          updated_at,
-          subjects:assigned_subject_id (
-            id,
-            code,
-            name_km,
-            name_en
-          )
-        `)
-        .eq('id', targetUserId)
-        .single();
+      // Select directly from public.profiles
+      try {
+        const { data: singleProfile, error: singleError } = await admin
+          .from('profiles')
+          .select('id, full_name, email, role, status, assigned_subject_id, created_at, updated_at')
+          .eq('id', targetUserId)
+          .maybeSingle();
 
-      if (singleJoined) {
-        return NextResponse.json({
-          user: enrichUser(singleJoined),
-          subjects: subjectsList,
-        });
-      }
-
-      // Plain select on profiles
-      const { data: singleProfile } = await admin
-        .from('profiles')
-        .select('id, full_name, email, role, assigned_subject_id, created_at, updated_at')
-        .eq('id', targetUserId)
-        .single();
-
-      if (singleProfile) {
-        return NextResponse.json({
-          user: enrichUser(singleProfile),
-          subjects: subjectsList,
-        });
+        if (singleError) {
+          console.error('Supabase Error Details:', singleError);
+        } else if (singleProfile) {
+          return NextResponse.json({
+            user: enrichUser(singleProfile),
+            subjects: subjectsList,
+          });
+        }
+      } catch (error) {
+        console.error('Supabase Error Details:', error);
       }
 
       const { data: singleLegacy } = await admin
         .from('user_roles')
         .select('*')
         .eq('user_id', targetUserId)
-        .single();
+        .maybeSingle();
 
       if (singleLegacy) {
         return NextResponse.json({
@@ -161,40 +205,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 3. Fetch all profiles directly from Supabase (Joined with public.subjects)
+    // 3. Fetch all profiles directly from public.profiles
     let fetchedProfiles: any[] = [];
-    const { data: joinedProfiles, error: joinError } = await admin
-      .from('profiles')
-      .select(`
-        id,
-        full_name,
-        email,
-        role,
-        assigned_subject_id,
-        created_at,
-        updated_at,
-        subjects:assigned_subject_id (
-          id,
-          code,
-          name_km,
-          name_en
-        )
-      `)
-      .order('created_at', { ascending: false });
-
-    if (!joinError && joinedProfiles) {
-      fetchedProfiles = joinedProfiles;
-    } else {
-      // Fallback to direct select if relational join syntax unsupported
+    try {
       const { data: plainProfiles, error: profError } = await admin
         .from('profiles')
-        .select('*')
+        .select('id, full_name, email, role, status, assigned_subject_id, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (profError) {
-        console.error('[Supabase RLS/Admin Error] Could not fetch profiles table:', profError.message, profError);
-      }
-      if (plainProfiles && plainProfiles.length > 0) {
+        console.error('Supabase Error Details:', profError);
+      } else if (plainProfiles && plainProfiles.length > 0) {
         fetchedProfiles = plainProfiles;
       } else {
         // Fallback: check legacy user_roles table if profiles table is empty
@@ -204,19 +225,17 @@ export async function GET(request: NextRequest) {
           .order('created_at', { ascending: false });
 
         if (legacyUsers && legacyUsers.length > 0) {
-          return NextResponse.json({
-            users: legacyUsers.map(enrichUser),
-            subjects: subjectsList,
-            isLegacy: true,
-          });
+          fetchedProfiles = legacyUsers;
         }
       }
+    } catch (error) {
+      console.error('Supabase Error Details:', error);
     }
 
     // Merge database profiles with live dynamic users
     const userMap = new Map<string, any>();
     fetchedProfiles.forEach((p) => userMap.set(p.id, p));
-    DYNAMIC_USERS.forEach((p, id) => {
+    dynamicUserCache.forEach((p, id) => {
       if (p._deleted) {
         userMap.delete(id);
       } else {
@@ -224,7 +243,6 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Return ONLY actual profiles from Supabase database / dynamic users (Zero fake/mock profiles)
     const finalUsers = Array.from(userMap.values()).map(enrichUser);
 
     return NextResponse.json({
@@ -239,21 +257,23 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/admin/users
- * Creates a new user in auth.users and creates/updates public.profiles.
+ * Creates a new user in auth.users and creates public.profiles record.
  * Requires super_admin role.
  * Body: { email, password, full_name, role, assigned_subject_id }
  */
 export async function POST(request: NextRequest) {
+  // 1. Authenticate caller as super_admin
   const verification = await verifySuperAdmin(request);
   if (!verification.authorized) {
     return NextResponse.json(
-      { error: verification.error || 'Forbidden: 403 Forbidden' },
-      { status: verification.statusCode }
+      { error: verification.error || 'Forbidden: 403 Forbidden. Super Admin credentials required.' },
+      { status: verification.statusCode || 403 }
     );
   }
 
   const admin = getSupabaseAdmin();
   if (!admin) {
+    console.error('[Admin API User Creation Error]: Supabase server admin client is unavailable.');
     return NextResponse.json(
       { error: 'Supabase server admin client is unavailable.' },
       { status: 503 }
@@ -297,38 +317,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve assigned_subject_id if a code like 'math' was passed instead of UUID
-    let resolvedSubjectId: string | null = assigned_subject_id || null;
-    let resolvedSubjectCode: string = assigned_subject_id || 'math';
+    // Validate and resolve assigned_subject_id:
+    // Conforms strictly to UUID nullable, converts empty string "" or invalid format to null
+    const { subjectId: resolvedSubjectId, subjectCode: resolvedSubjectCode } =
+      sanitizeAssignedSubjectId(assigned_subject_id, role);
 
-    if (resolvedSubjectId && !UUID_REGEX.test(resolvedSubjectId)) {
-      resolvedSubjectCode = resolvedSubjectId;
-      const { data: matchedSubject } = await admin
-        .from('subjects')
-        .select('id, code')
-        .eq('code', resolvedSubjectId)
-        .single();
-      if (matchedSubject) {
-        resolvedSubjectId = matchedSubject.id;
-        resolvedSubjectCode = matchedSubject.code;
-      }
-    } else if (resolvedSubjectId && UUID_REGEX.test(resolvedSubjectId)) {
-      const { data: matchedSubject } = await admin
-        .from('subjects')
-        .select('id, code')
-        .eq('id', resolvedSubjectId)
-        .single();
-      if (matchedSubject) {
-        resolvedSubjectCode = matchedSubject.code;
-      }
-    }
+    console.log(`[Admin API] Creating user in Supabase Auth: email="${cleanEmail}", role="${role}", subject_id="${resolvedSubjectId}"`);
 
-    // 1. Create account in auth.users via Supabase Auth Admin API (with signUp fallback & resilient UUID)
-    let newUserId: string | null = null;
-    let authErrorMessage: string | null = null;
-
+    // a) Create user in Supabase Auth via admin client
+    let authData: any = null;
+    let authError: any = null;
     try {
-      const { data: authUser, error: authError } = await admin.auth.admin.createUser({
+      const res = await admin.auth.admin.createUser({
         email: cleanEmail,
         password: password,
         email_confirm: true,
@@ -339,106 +339,120 @@ export async function POST(request: NextRequest) {
           assigned_subject_code: resolvedSubjectCode,
         },
       });
-
-      if (authUser?.user) {
-        newUserId = authUser.user.id;
-      } else {
-        authErrorMessage = authError?.message || null;
-      }
-    } catch (e: any) {
-      authErrorMessage = e?.message || null;
+      authData = res.data;
+      authError = res.error;
+    } catch (err) {
+      authError = err;
     }
 
-    if (!newUserId) {
-      try {
-        const { data: signUpData, error: signUpErr } = await admin.auth.signUp({
-          email: cleanEmail,
-          password: password,
-          options: {
-            data: {
-              full_name: cleanName,
-              role: role,
-              assigned_subject_id: resolvedSubjectId,
-              assigned_subject_code: resolvedSubjectCode,
-            },
-          },
-        });
+    if (authError || !authData?.user) {
+      console.error('Supabase Error Details:', authError);
 
-        if (signUpData?.user) {
-          newUserId = signUpData.user.id;
-        } else {
-          // If Supabase email rate limit is hit or service key not configured, generate a real UUID
-          console.warn('Supabase Auth note:', signUpErr?.message || authErrorMessage);
-          newUserId = crypto.randomUUID();
-        }
-      } catch {
-        newUserId = crypto.randomUUID();
+      let errorMessage = authError?.message || 'Failed to create user in Supabase Auth.';
+      if (
+        errorMessage.includes('requires a valid Bearer token') ||
+        authError?.status === 401
+      ) {
+        errorMessage =
+          'Supabase Admin Service Role key (SUPABASE_SERVICE_ROLE_KEY) is missing or invalid. Please configure SUPABASE_SERVICE_ROLE_KEY in .env.local to enable server-side admin user provisioning.';
       }
+
+      return NextResponse.json(
+        {
+          error: errorMessage,
+          details: authError?.message || authError,
+        },
+        { status: authError?.status || 400 }
+      );
     }
 
-    // 2. Insert into public.profiles
+    const authUser = authData.user;
+    const newUserId = authUser.id;
+
+    console.log(`[Admin API] Auth user created with ID: ${newUserId}. Now saving into public.profiles...`);
+
+    // b) Insert new user's profile into public.profiles strictly conforming to table columns:
+    // id (UUID), email (TEXT), full_name (TEXT), role (user_role), assigned_subject_id (UUID or null), status (TEXT)
+    const now = new Date().toISOString();
     const profilePayload = {
       id: newUserId,
       email: cleanEmail,
       full_name: cleanName,
       role: role,
-      assigned_subject_id: role === 'super_admin' ? null : resolvedSubjectId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      assigned_subject_id: resolvedSubjectId,
+      status: 'approved',
+      created_at: now,
+      updated_at: now,
     };
 
-    const { data: createdProfile, error: profileError } = await admin
-      .from('profiles')
-      .upsert(profilePayload)
-      .select('*')
-      .single();
-
-    if (profileError) {
-      console.warn('Profiles upsert warning (trigger may have handled it):', profileError.message);
-    }
-
-    // Also sync to legacy user_roles table if it exists
+    let profileData: any = null;
     try {
-      await admin.from('user_roles').upsert({
-        user_id: newUserId,
-        email: cleanEmail,
-        full_name: cleanName,
-        role: role === 'super_admin' ? 'super_admin' : 'subject_lead',
-        subject_assigned: role === 'super_admin' ? null : resolvedSubjectCode,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      });
-    } catch {
-      // Legacy table sync is optional
+      const { data: inserted, error: profileError } = await admin
+        .from('profiles')
+        .upsert(profilePayload, { onConflict: 'id' })
+        .select('*')
+        .single();
+
+      if (profileError) {
+        console.error('Supabase Error Details:', profileError);
+        return NextResponse.json(
+          {
+            error: `User auth account created (${newUserId}), but failed to save profile into public.profiles: ${profileError.message}`,
+            details: profileError,
+            userId: newUserId,
+          },
+          { status: 500 }
+        );
+      }
+      profileData = inserted;
+    } catch (error) {
+      console.error('Supabase Error Details:', error);
+      return NextResponse.json(
+        {
+          error: `Exception saving profile into public.profiles: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          details: error,
+          userId: newUserId,
+        },
+        { status: 500 }
+      );
     }
 
-    // Also track in live dynamic cache
-    DYNAMIC_USERS.set(newUserId, { ...profilePayload, assigned_subject_code: resolvedSubjectCode });
+    console.log(`[Admin API] Profile saved successfully for user ${newUserId} (${cleanEmail}).`);
 
-    const responseUser = {
-      ...(createdProfile || profilePayload),
+    // Keep dynamic cache in sync
+    addCachedUser({
+      ...profilePayload,
+      ...(profileData || {}),
+      assigned_subject_code: resolvedSubjectCode,
+    });
+
+    const finalUser = {
+      ...(profileData || profilePayload),
       assigned_subject_code: resolvedSubjectCode,
     };
 
     return NextResponse.json(
       {
         success: true,
-        user: responseUser,
-        message: 'Team member account created successfully.',
+        user: finalUser,
+        message: 'Account created successfully in Supabase Auth and public.profiles.',
       },
       { status: 201 }
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Supabase Error Details:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 /**
  * PUT /api/admin/users
- * Updates an existing user and optionally resets password.
+ * Updates an existing user:
+ * - Update status ('approved' | 'rejected' | 'pending')
+ * - Reset password
+ * - Update metadata (name, email, role, subject)
  * Requires super_admin role.
- * Body: { user_id, email, password, full_name, role, assigned_subject_id }
  */
 export async function PUT(request: NextRequest) {
   const verification = await verifySuperAdmin(request);
@@ -459,7 +473,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { user_id, email, password, full_name, role, assigned_subject_id } = body;
+    const { user_id, email, password, full_name, role, assigned_subject_id, status } = body;
 
     if (!user_id) {
       return NextResponse.json(
@@ -470,32 +484,11 @@ export async function PUT(request: NextRequest) {
 
     const cleanEmail = email ? email.trim().toLowerCase() : undefined;
     const cleanName = full_name ? full_name.trim() : undefined;
+    const cleanStatus = status ? status.trim().toLowerCase() : undefined;
 
-    // Resolve assigned_subject_id
-    let resolvedSubjectId: string | null = assigned_subject_id ?? null;
-    let resolvedSubjectCode: string = assigned_subject_id || 'math';
-
-    if (resolvedSubjectId && !UUID_REGEX.test(resolvedSubjectId)) {
-      resolvedSubjectCode = resolvedSubjectId;
-      const { data: matchedSubject } = await admin
-        .from('subjects')
-        .select('id, code')
-        .eq('code', resolvedSubjectId)
-        .single();
-      if (matchedSubject) {
-        resolvedSubjectId = matchedSubject.id;
-        resolvedSubjectCode = matchedSubject.code;
-      }
-    } else if (resolvedSubjectId && UUID_REGEX.test(resolvedSubjectId)) {
-      const { data: matchedSubject } = await admin
-        .from('subjects')
-        .select('id, code')
-        .eq('id', resolvedSubjectId)
-        .single();
-      if (matchedSubject) {
-        resolvedSubjectCode = matchedSubject.code;
-      }
-    }
+    // Conforms strictly to UUID nullable, converts empty string "" or invalid format to null
+    const { subjectId: cleanSubjectId, subjectCode: cleanSubjectCode } =
+      sanitizeAssignedSubjectId(assigned_subject_id, role);
 
     // 1. Update in auth.users via admin.updateUserById
     const authUpdatePayload: {
@@ -514,90 +507,102 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    authUpdatePayload.user_metadata = {
-      ...(cleanName ? { full_name: cleanName } : {}),
-      ...(role ? { role: role } : {}),
-      assigned_subject_id: role === 'super_admin' ? null : resolvedSubjectId,
-      assigned_subject_code: role === 'super_admin' ? null : resolvedSubjectCode,
-    };
+    const metadataUpdate: Record<string, unknown> = {};
+    if (cleanName) metadataUpdate.full_name = cleanName;
+    if (role) metadataUpdate.role = role;
+    if (cleanStatus) metadataUpdate.status = cleanStatus;
+    if (assigned_subject_id !== undefined) {
+      metadataUpdate.assigned_subject_id = cleanSubjectId;
+      metadataUpdate.assigned_subject_code = cleanSubjectCode;
+    }
 
-    // Only invoke auth update if fields changed and user_id is a valid UUID
-    if (Object.keys(authUpdatePayload).length > 0) {
-      if (UUID_REGEX.test(user_id)) {
+    if (Object.keys(metadataUpdate).length > 0) {
+      authUpdatePayload.user_metadata = metadataUpdate;
+    }
+
+    if (Object.keys(authUpdatePayload).length > 0 && UUID_REGEX.test(user_id)) {
+      try {
         const { error: authError } = await admin.auth.admin.updateUserById(
           user_id,
           authUpdatePayload
         );
         if (authError) {
-          console.warn('Auth admin update notice:', authError.message);
+          console.error('Supabase Error Details:', authError);
         }
-      } else {
-        console.info(`Skipping auth.admin.updateUserById for mock/seed user: ${user_id}`);
+      } catch (err) {
+        console.error('Supabase Error Details:', err);
       }
     }
 
-    // 2. Update record in public.profiles
-    const profileUpdate: Record<string, unknown> = {
+    // 2. Update record in public.profiles: strictly conforming columns
+    // id (UUID), email (TEXT), full_name (TEXT), role, assigned_subject_id (UUID or null), status
+    const profileUpdate: {
+      updated_at: string;
+      email?: string;
+      full_name?: string;
+      role?: 'super_admin' | 'subject_lead' | 'subject_member' | 'student';
+      status?: 'pending' | 'approved' | 'rejected';
+      assigned_subject_id?: string | null;
+    } = {
       updated_at: new Date().toISOString(),
     };
+
     if (cleanEmail) profileUpdate.email = cleanEmail;
     if (cleanName) profileUpdate.full_name = cleanName;
-    if (role) profileUpdate.role = role;
+    if (role && ['super_admin', 'subject_lead', 'subject_member', 'student'].includes(role)) {
+      profileUpdate.role = role as any;
+    }
+    if (cleanStatus && ['pending', 'approved', 'rejected'].includes(cleanStatus)) {
+      profileUpdate.status = cleanStatus as any;
+    }
     if (assigned_subject_id !== undefined) {
-      profileUpdate.assigned_subject_id = role === 'super_admin' ? null : resolvedSubjectId;
+      profileUpdate.assigned_subject_id = cleanSubjectId;
     }
 
-    const { data: updatedProfile, error: profError } = await admin
-      .from('profiles')
-      .update(profileUpdate)
-      .eq('id', user_id)
-      .select('*')
-      .single();
-
-    if (profError) {
-      console.warn('Profiles update warning:', profError.message);
-    }
-
-    // Also update legacy user_roles table if relevant
+    let updatedProfile: any = null;
     try {
-      const legacyUpdate: Record<string, unknown> = {
-        updated_at: new Date().toISOString(),
-      };
-      if (cleanEmail) legacyUpdate.email = cleanEmail;
-      if (cleanName) legacyUpdate.full_name = cleanName;
-      if (role === 'super_admin' || role === 'subject_lead') {
-        legacyUpdate.role = role;
+      const { data: updated, error: profError } = await admin
+        .from('profiles')
+        .update(profileUpdate)
+        .eq('id', user_id)
+        .select('*')
+        .single();
+
+      if (profError) {
+        console.error('Supabase Error Details:', profError);
+      } else if (updated) {
+        updatedProfile = updated;
       }
-      if (assigned_subject_id !== undefined) {
-        legacyUpdate.subject_assigned = role === 'super_admin' ? null : resolvedSubjectCode;
-      }
-      await admin
-        .from('user_roles')
-        .update(legacyUpdate)
-        .eq('user_id', user_id);
-    } catch {
-      // Legacy sync optional
+    } catch (err) {
+      console.error('Supabase Error Details:', err);
     }
+
+    // 3. Update dynamic memory cache
+    updateCachedUser(user_id, {
+      ...profileUpdate,
+      assigned_subject_code: cleanSubjectCode,
+    } as any);
 
     const responseUser = {
       ...(updatedProfile || { id: user_id, ...profileUpdate }),
-      assigned_subject_code: resolvedSubjectCode,
+      assigned_subject_code: cleanSubjectCode,
     };
-
-    // Update in dynamic cache
-    const existingDyn = DYNAMIC_USERS.get(user_id) || {};
-    DYNAMIC_USERS.set(user_id, {
-      ...existingDyn,
-      ...responseUser,
-    });
 
     return NextResponse.json({
       success: true,
       user: responseUser,
-      message: 'Team member account updated successfully.',
+      message:
+        cleanStatus === 'approved'
+          ? 'Account approved successfully.'
+          : cleanStatus === 'rejected'
+          ? 'Account rejected.'
+          : password
+          ? 'Password updated successfully.'
+          : 'Account updated successfully.',
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Supabase Error Details:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -606,7 +611,6 @@ export async function PUT(request: NextRequest) {
  * DELETE /api/admin/users
  * Removes user from auth.users (cascades to profiles).
  * Requires super_admin role.
- * Query param: ?user_id=... or body { user_id }
  * Enforces self-deletion prevention.
  */
 export async function DELETE(request: NextRequest) {
@@ -651,13 +655,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'Self-deletion is forbidden. You cannot delete your currently active Super Admin account.',
+            'មិនអាចលុបគណនី Super Admin ផ្ទាល់ខ្លួនរបស់អ្នកបានឡើយ / Self-deletion is forbidden. You cannot delete your currently active Super Admin account.',
         },
         { status: 403 }
       );
     }
 
-    // Check by email as extra guard
     if (verification.callerEmail) {
       const { data: targetProfile } = await admin
         .from('profiles')
@@ -673,35 +676,45 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              'Self-deletion is forbidden. You cannot delete your currently active Super Admin account.',
+              'មិនអាចលុបគណនី Super Admin ផ្ទាល់ខ្លួនរបស់អ្នកបានឡើយ / Self-deletion is forbidden. You cannot delete your currently active Super Admin account.',
           },
           { status: 403 }
         );
       }
     }
 
-    // 1. Delete from auth.users via admin API if user_id is a valid UUID
+    // 1. Delete from auth.users via admin API if valid UUID
     if (UUID_REGEX.test(targetUserId)) {
-      const { error: deleteAuthError } = await admin.auth.admin.deleteUser(targetUserId);
-      if (deleteAuthError) {
-        console.warn('Auth admin deleteUser notice:', deleteAuthError.message);
+      try {
+        const { error: deleteAuthError } = await admin.auth.admin.deleteUser(targetUserId);
+        if (deleteAuthError) {
+          console.warn('Auth admin deleteUser notice:', deleteAuthError.message);
+        }
+      } catch (err) {
+        console.warn('Auth admin delete exception:', err);
       }
-    } else {
-      console.info(`Skipping auth.admin.deleteUser for mock/seed user: ${targetUserId}`);
     }
 
-    // 2. Cascade cleanup on profiles if FK cascade wasn't triggered
-    await admin.from('profiles').delete().eq('id', targetUserId);
+    // 2. Cascade cleanup on profiles
+    try {
+      await admin.from('profiles').delete().eq('id', targetUserId);
+    } catch {
+      // ignore
+    }
 
     // 3. Cleanup from user_roles
-    await admin.from('user_roles').delete().eq('user_id', targetUserId);
+    try {
+      await admin.from('user_roles').delete().eq('user_id', targetUserId);
+    } catch {
+      // ignore
+    }
 
-    // Mark deleted in dynamic cache
-    DYNAMIC_USERS.set(targetUserId, { _deleted: true });
+    // Mark deleted in dynamic memory cache
+    deleteCachedUser(targetUserId);
 
     return NextResponse.json({
       success: true,
-      message: 'Account deleted permanently.',
+      message: 'Account permanently removed.',
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';

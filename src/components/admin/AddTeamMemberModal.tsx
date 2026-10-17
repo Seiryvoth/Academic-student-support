@@ -16,13 +16,18 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
 import { SUBJECTS, SubjectId } from '@/lib/curriculum-data';
-import { createTeamMemberApi, SubjectTeamMember } from '@/lib/team-store';
+import {
+  createTeamMemberApi,
+  SubjectTeamMember,
+  resolveCanonicalSubjectUuid,
+} from '@/lib/team-store';
 
 interface AddTeamMemberModalProps {
   isOpen: boolean;
   initialSubjectId?: SubjectId | null;
   onClose: () => void;
   onSuccess: (newMember: SubjectTeamMember) => void;
+  onErrorToast?: (message: string) => void;
 }
 
 export function AddTeamMemberModal({
@@ -30,6 +35,7 @@ export function AddTeamMemberModal({
   initialSubjectId = null,
   onClose,
   onSuccess,
+  onErrorToast,
 }: AddTeamMemberModalProps) {
   const { isKhmer } = useLanguage();
 
@@ -70,40 +76,43 @@ export function AddTeamMemberModal({
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanName) {
-      setError(
-        isKhmer
-          ? 'សូមបញ្ចូលគោត្តនាម និងនាម'
-          : 'Please enter the member’s full name'
-      );
+      const err = isKhmer
+        ? 'សូមបញ្ចូលគោត្តនាម និងនាម'
+        : 'Please enter the member’s full name';
+      setError(err);
+      onErrorToast?.(err);
       return;
     }
 
     if (!cleanEmail || !cleanEmail.includes('@')) {
-      setError(
-        isKhmer
-          ? 'សូមបញ្ចូលអាសយដ្ឋានអ៊ីមែលត្រឹមត្រូវ'
-          : 'Please enter a valid email address'
-      );
+      const err = isKhmer
+        ? 'សូមបញ្ចូលអាសយដ្ឋានអ៊ីមែលត្រឹមត្រូវ'
+        : 'Please enter a valid email address';
+      setError(err);
+      onErrorToast?.(err);
       return;
     }
 
     if (!password || password.length < 6) {
-      setError(
-        isKhmer
-          ? 'ពាក្យសម្ងាត់ត្រូវមានយ៉ាងតិច ៦ តួអក្សរ'
-          : 'Password must be at least 6 characters'
-      );
+      const err = isKhmer
+        ? 'ពាក្យសម្ងាត់ត្រូវមានយ៉ាងតិច ៦ តួអក្សរ'
+        : 'Password must be at least 6 characters';
+      setError(err);
+      onErrorToast?.(err);
       return;
     }
 
     if (role !== 'super_admin' && !subjectId) {
-      setError(
-        isKhmer
-          ? 'សូមជ្រើសរើសមុខវិជ្ជាទទួលខុសត្រូវ'
-          : 'Please select an assigned subject'
-      );
+      const err = isKhmer
+        ? 'សូមជ្រើសរើសមុខវិជ្ជាទទួលខុសត្រូវ'
+        : 'Please select an assigned subject';
+      setError(err);
+      onErrorToast?.(err);
       return;
     }
+
+    // Resolve assigned_subject_id to canonical UUID or null
+    const canonicalSubjectId = resolveCanonicalSubjectUuid(subjectId, role);
 
     setLoading(true);
 
@@ -113,15 +122,17 @@ export function AddTeamMemberModal({
         email: cleanEmail,
         password: password,
         role: role,
-        assigned_subject_id: role === 'super_admin' ? null : subjectId,
-        subject_code: role === 'super_admin' ? undefined : subjectId,
+        assigned_subject_id: canonicalSubjectId,
+        subject_code: role === 'super_admin' ? undefined : (subjectId || undefined),
       });
 
       onSuccess(newMember);
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[Add Member Form Submission Error]:', msg);
       setError(msg);
+      onErrorToast?.(msg);
     } finally {
       setLoading(false);
     }

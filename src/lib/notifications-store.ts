@@ -119,9 +119,17 @@ export function saveLocalActivities(activities: ActivityNotificationItem[]): voi
   }
 }
 
+// Cache table availability to prevent repeated 404 network spam if table not in schema cache
+let isActivityNotificationsTableAvailable: boolean | null = null;
+
 // Fetch activities (hybrid: Supabase with local fallback)
 export async function getStoredActivities(): Promise<ActivityNotificationItem[]> {
   const localList = getLocalActivities();
+
+  // If table is known to not exist in remote schema cache, return local cache directly
+  if (isActivityNotificationsTableAvailable === false) {
+    return localList;
+  }
 
   if (isSupabaseConfigured && supabase) {
     try {
@@ -131,7 +139,14 @@ export async function getStoredActivities(): Promise<ActivityNotificationItem[]>
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (!error && data && data.length > 0) {
+      if (error) {
+        if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          isActivityNotificationsTableAvailable = false;
+        } else {
+          console.error('Supabase Error Details:', error);
+        }
+      } else if (data && data.length > 0) {
+        isActivityNotificationsTableAvailable = true;
         const mappedFromDb: ActivityNotificationItem[] = data.map((row: any) => ({
           id: String(row.id),
           actionType: row.action_type,
@@ -158,8 +173,8 @@ export async function getStoredActivities(): Promise<ActivityNotificationItem[]>
         saveLocalActivities(merged);
         return merged;
       }
-    } catch {
-      // Graceful fallback to local cache
+    } catch (err) {
+      console.error('Supabase Error Details:', err);
     }
   }
 
@@ -194,10 +209,10 @@ export async function recordActivityNotification(params: {
   const updated = [newActivity, ...current];
   saveLocalActivities(updated);
 
-  // 2. Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  // 2. Sync to Supabase if table is available
+  if (isSupabaseConfigured && supabase && isActivityNotificationsTableAvailable !== false) {
     try {
-      await supabase.from('activity_notifications').insert({
+      const { error } = await supabase.from('activity_notifications').insert({
         id: newActivity.id,
         action_type: newActivity.actionType,
         subject: newActivity.subject || null,
@@ -211,8 +226,16 @@ export async function recordActivityNotification(params: {
         message_en: newActivity.messageEn,
         created_at: newActivity.createdAt,
       });
+
+      if (error) {
+        if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          isActivityNotificationsTableAvailable = false;
+        } else {
+          console.error('Supabase Error Details:', error);
+        }
+      }
     } catch (err) {
-      console.warn('Supabase activity notification insert failed, cached locally:', err);
+      console.error('Supabase Error Details:', err);
     }
   }
 
@@ -231,7 +254,6 @@ export function subscribeToActivities(onUpdate: () => void): () => void {
 
   const handleUpdate = () => onUpdate();
   window.addEventListener('moeys_activity_updated', handleUpdate);
-  window.addEventListener('storage', handleUpdate);
 
   let realtimeChannel: any = null;
   if (isSupabaseConfigured && supabase) {
@@ -253,7 +275,6 @@ export function subscribeToActivities(onUpdate: () => void): () => void {
 
   return () => {
     window.removeEventListener('moeys_activity_updated', handleUpdate);
-    window.removeEventListener('storage', handleUpdate);
     if (realtimeChannel && supabase) {
       try {
         supabase.removeChannel(realtimeChannel);

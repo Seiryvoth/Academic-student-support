@@ -98,12 +98,10 @@ function PracticeMcqContent() {
   }, [searchParams]);
 
   useEffect(() => {
-    const handleStorage = () => setRefreshKey((prev) => prev + 1);
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('moeys-lessons-updated', handleStorage);
+    const handleLessonsUpdate = () => setRefreshKey((prev) => prev + 1);
+    window.addEventListener('moeys-lessons-updated', handleLessonsUpdate);
     return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('moeys-lessons-updated', handleStorage);
+      window.removeEventListener('moeys-lessons-updated', handleLessonsUpdate);
     };
   }, []);
 

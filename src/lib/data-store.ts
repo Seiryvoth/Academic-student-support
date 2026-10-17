@@ -46,6 +46,7 @@ export interface StaffAccount {
   role: 'super_admin' | 'subject_lead' | 'subject_member' | 'student';
   subjectAssigned: SubjectId | null; // null for super_admin and student
   isActive: boolean;
+  status?: 'pending' | 'approved' | 'rejected';
   createdAt: string;
 }
 
@@ -710,13 +711,16 @@ export function setCurrentStaffSession(account: StaffAccount | null): void {
   memoryStaffSession = account;
   if (typeof window === 'undefined') return;
   try {
-    if (account) {
-      localStorage.setItem(STORAGE_KEY_CURRENT_STAFF, JSON.stringify(account));
+    const prev = localStorage.getItem(STORAGE_KEY_CURRENT_STAFF);
+    const nextStr = account ? JSON.stringify(account) : null;
+    if (prev === nextStr) return; // Prevent duplicate dispatch & re-render churn
+
+    if (account && nextStr) {
+      localStorage.setItem(STORAGE_KEY_CURRENT_STAFF, nextStr);
     } else {
       localStorage.removeItem(STORAGE_KEY_CURRENT_STAFF);
     }
     window.dispatchEvent(new Event('moeys_staff_auth_changed'));
-    window.dispatchEvent(new Event('storage'));
   } catch (err) {
     console.error('Error setting staff session:', err);
   }
@@ -734,7 +738,6 @@ export function saveStoredCustomLessons(lessons: LessonItem[]): void {
   saveCustomLessonsToStorage(lessons);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('moeys-lessons-updated'));
-    window.dispatchEvent(new Event('storage'));
   }
 }
 
@@ -865,7 +868,6 @@ export async function updateLessonTitle(
   // Notify UI
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('moeys-lessons-updated'));
-    window.dispatchEvent(new Event('storage'));
   }
 
   return updated;
@@ -912,7 +914,6 @@ export async function deleteLessonCascade(lessonId: string): Promise<boolean> {
   // 5. Notify all components
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('moeys-lessons-updated'));
-    window.dispatchEvent(new Event('storage'));
   }
 
   return true;

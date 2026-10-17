@@ -16,6 +16,7 @@ import {
   Mail,
   ShieldCheck,
   Users,
+  KeyRound,
 } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
 import { SubjectMeta, SubjectId } from '@/lib/curriculum-data';
@@ -26,6 +27,7 @@ interface SubjectTeamCardProps {
   members: SubjectTeamMember[];
   onAddMember: (subjectId: SubjectId) => void;
   onEditMember: (member: SubjectTeamMember) => void;
+  onResetPassword?: (member: SubjectTeamMember) => void;
   onDeleteMember: (member: SubjectTeamMember) => void;
   currentUserId?: string;
   currentUserEmail?: string;
@@ -36,6 +38,7 @@ export function SubjectTeamCard({
   members,
   onAddMember,
   onEditMember,
+  onResetPassword,
   onDeleteMember,
   currentUserId,
   currentUserEmail,
@@ -251,6 +254,17 @@ export function SubjectTeamCard({
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
+
+                        {/* Reset Password Button */}
+                        {onResetPassword && (
+                          <button
+                            onClick={() => onResetPassword(m)}
+                            title={isKhmer ? 'ប្តូរលេខសម្ងាត់' : 'Reset Password'}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
+                          >
+                            <KeyRound className="w-4 h-4" />
+                          </button>
+                        )}
 
                         {/* Delete Button */}
                         <button

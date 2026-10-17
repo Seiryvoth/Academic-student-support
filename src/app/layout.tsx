@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 import { LanguageProvider } from '@/context/language-context';
+import { AuthProvider } from '@/context/auth-context';
 import { Navbar } from '@/components/navbar';
 import { InstallPwaBanner } from '@/components/install-pwa-banner';
 import { NotificationToast } from '@/components/notification-toast';
@@ -44,13 +45,15 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen flex flex-col antialiased selection:bg-blue-500/20 selection:text-blue-600 dark:selection:text-blue-300">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <body className="min-h-screen flex flex-col antialiased selection:bg-blue-500/20 selection:text-blue-600 dark:selection:text-blue-300" suppressHydrationWarning>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <LanguageProvider>
-            <Navbar />
-            <main className="flex-1">{children}</main>
-            <InstallPwaBanner />
-            <NotificationToast />
+            <AuthProvider>
+              <Navbar />
+              <main className="flex-1">{children}</main>
+              <InstallPwaBanner />
+              <NotificationToast />
+            </AuthProvider>
           </LanguageProvider>
         </ThemeProvider>
       </body>

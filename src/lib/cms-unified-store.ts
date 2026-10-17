@@ -67,7 +67,6 @@ export const CMS_SYNC_EVENT = 'moeys_cms_data_sync';
 export function notifyCmsSync() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(CMS_SYNC_EVENT));
-    window.dispatchEvent(new Event('storage'));
   }
 }
 

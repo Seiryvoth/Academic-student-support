@@ -120,11 +120,9 @@ export function AcademicHubView() {
     };
     loadVideos();
 
-    window.addEventListener('storage', loadVideos);
     window.addEventListener('moeys-lessons-updated', loadVideos);
     window.addEventListener(CMS_SYNC_EVENT, loadVideos);
     return () => {
-      window.removeEventListener('storage', loadVideos);
       window.removeEventListener('moeys-lessons-updated', loadVideos);
       window.removeEventListener(CMS_SYNC_EVENT, loadVideos);
     };

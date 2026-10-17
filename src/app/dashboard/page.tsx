@@ -85,6 +85,7 @@ import {
   deleteCurriculumMcqInStore,
 } from '@/lib/curriculum-mcqs-generator';
 import { useLanguage } from '@/context/language-context';
+import { useAuth } from '@/context/auth-context';
 import { parseYouTubeUrl, parsePdfUrl } from '@/lib/storage-utils';
 import { LatexRenderer } from '@/components/latex-renderer';
 import { EditVideoModal } from '@/components/edit-video-modal';
@@ -101,8 +102,9 @@ import { reorderLessonVideos, getVideosForLesson } from '@/lib/data-store';
 export default function StaffDashboardPage() {
   const router = useRouter();
   const { t, isKhmer } = useLanguage();
+  const { staffSession, isLoading, isAuthenticated, logout } = useAuth();
+  const currentStaff = staffSession;
 
-  const [currentStaff, setCurrentStaff] = useState<StaffAccount | null>(null);
   const [activeTab, setActiveTab] = useState<'manage_content' | 'publish' | 'student_qa' | 'recent_activity' | 'manage_videos' | 'manage_staff'>('manage_content');
   const [videos, setVideos] = useState<VideoResourceItem[]>([]);
   const [staffList, setStaffList] = useState<StaffAccount[]>([]);
@@ -158,19 +160,21 @@ export default function StaffDashboardPage() {
     },
   ]);
 
-  // Load session and data
+  // Auth Guard: Only redirect when isLoading transitions from true to false and user is not authenticated
   useEffect(() => {
-    const session = getCurrentStaffSession();
-    if (!session) {
+    if (!isLoading && !isAuthenticated) {
       router.push('/login');
-      return;
     }
-    setCurrentStaff(session);
+  }, [isLoading, isAuthenticated, router]);
+
+  // Load session-dependent data
+  useEffect(() => {
+    if (!staffSession) return;
 
     // If Subject Lead, force lock subject to their assigned subject
-    if (session.role === 'subject_lead' && session.subjectAssigned) {
-      setFormSubject(session.subjectAssigned);
-      setManageSubject(session.subjectAssigned);
+    if (staffSession.role === 'subject_lead' && staffSession.subjectAssigned) {
+      setFormSubject(staffSession.subjectAssigned);
+      setManageSubject(staffSession.subjectAssigned);
     } else if (typeof window !== 'undefined') {
       // If Super Admin or query param provided, select requested subject
       const urlParams = new URLSearchParams(window.location.search);
@@ -197,13 +201,11 @@ export default function StaffDashboardPage() {
 
     window.addEventListener('moeys-lessons-updated', handleLessonUpdate);
     window.addEventListener(CMS_SYNC_EVENT, handleCmsSync);
-    window.addEventListener('storage', handleCmsSync);
     return () => {
       window.removeEventListener('moeys-lessons-updated', handleLessonUpdate);
       window.removeEventListener(CMS_SYNC_EVENT, handleCmsSync);
-      window.removeEventListener('storage', handleCmsSync);
     };
-  }, [router]);
+  }, [staffSession]);
 
   const cleanStaffRole = (currentStaff?.role || '').toString().trim().toLowerCase();
   const isSuperAdmin = cleanStaffRole === 'super_admin' || cleanStaffRole === 'admin';
@@ -775,7 +777,25 @@ export default function StaffDashboardPage() {
     return allUnifiedLessonMcqs;
   }, [allUnifiedLessonMcqs, mcqFilterTab]);
 
-  if (!currentStaff) return null;
+  if (isLoading || !currentStaff) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-blue-600/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+            <ShieldCheck className="w-7 h-7 animate-pulse" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+              {isKhmer ? 'កំពុងផ្ទៀងផ្ទាត់គណនី...' : 'Verifying session...'}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              {isKhmer ? 'សូមរង់ចាំបន្តិច' : 'Please wait a moment'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-28">

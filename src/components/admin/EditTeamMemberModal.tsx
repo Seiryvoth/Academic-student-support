@@ -22,6 +22,7 @@ import {
   updateTeamMemberApi,
   SubjectTeamMember,
   resolveSubjectCode,
+  resolveCanonicalSubjectUuid,
 } from '@/lib/team-store';
 
 interface EditTeamMemberModalProps {
@@ -103,12 +104,14 @@ export function EditTeamMemberModal({
     setLoading(true);
 
     try {
+      const cleanSubjectId = resolveCanonicalSubjectUuid(subjectId, role);
+
       const updated = await updateTeamMemberApi({
         user_id: member.id,
         full_name: cleanName,
         email: cleanEmail,
         role: role,
-        assigned_subject_id: role === 'super_admin' ? null : subjectId,
+        assigned_subject_id: cleanSubjectId,
         subject_code: role === 'super_admin' ? undefined : subjectId,
         password: newPassword && newPassword.trim().length >= 6 ? newPassword.trim() : undefined,
       });
