@@ -101,7 +101,7 @@ export default function TeamManagementPage() {
       setIsRefreshing(true);
       try {
         const result = await fetchTeamFromApi();
-        if (result.users && result.users.length > 0) {
+        if (Array.isArray(result.users)) {
           setMembers(result.users);
         }
       } catch (err) {
@@ -127,7 +127,7 @@ export default function TeamManagementPage() {
     setIsRefreshing(true);
     try {
       const result = await fetchTeamFromApi();
-      if (result.users && result.users.length > 0) {
+      if (Array.isArray(result.users)) {
         setMembers(result.users);
       }
       showToast(
@@ -160,7 +160,7 @@ export default function TeamManagementPage() {
     });
   }, [members, searchQuery, roleFilter]);
 
-  // Group members dynamically by subject
+  // Group members dynamically by subject (Subject Leads first, then Subject Members)
   const membersBySubject = useMemo(() => {
     const grouped: Record<SubjectId, SubjectTeamMember[]> = {
       math: [],
@@ -178,6 +178,16 @@ export default function TeamManagementPage() {
           assignedSubjectCode: code,
         });
       }
+    });
+
+    // Sort: Leads first ('subject_lead'), then Members ('subject_member')
+    Object.keys(grouped).forEach((key) => {
+      const subjKey = key as SubjectId;
+      grouped[subjKey].sort((a, b) => {
+        if (a.role === 'subject_lead' && b.role !== 'subject_lead') return -1;
+        if (a.role !== 'subject_lead' && b.role === 'subject_lead') return 1;
+        return a.fullName.localeCompare(b.fullName);
+      });
     });
 
     return grouped;
@@ -234,8 +244,8 @@ export default function TeamManagementPage() {
     setDeleteDialogOpen(true);
   };
 
-  // Optimistic UI updates (No page refresh needed)
-  const handleAddSuccess = (newMember: SubjectTeamMember) => {
+  // Dynamic UI updates and live Supabase state refresh
+  const handleAddSuccess = async (newMember: SubjectTeamMember) => {
     setMembers((prev) => [
       newMember,
       ...prev.filter(
@@ -250,9 +260,19 @@ export default function TeamManagementPage() {
         ? `បានបង្កើតគណនី "${newMember.fullName}" ដោយជោគជ័យ!`
         : `Account for "${newMember.fullName}" created successfully!`
     );
+
+    // Refresh live Supabase state
+    try {
+      const refreshed = await fetchTeamFromApi();
+      if (Array.isArray(refreshed.users)) {
+        setMembers(refreshed.users);
+      }
+    } catch {
+      // optimistic update retained
+    }
   };
 
-  const handleEditSuccess = (updated: SubjectTeamMember) => {
+  const handleEditSuccess = async (updated: SubjectTeamMember) => {
     setMembers((prev) =>
       prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
     );
@@ -262,14 +282,34 @@ export default function TeamManagementPage() {
         ? `បានកែសម្រួលគណនី "${updated.fullName}" ដោយជោគជ័យ!`
         : `Account "${updated.fullName}" updated successfully!`
     );
+
+    // Refresh live Supabase state
+    try {
+      const refreshed = await fetchTeamFromApi();
+      if (Array.isArray(refreshed.users)) {
+        setMembers(refreshed.users);
+      }
+    } catch {
+      // optimistic update retained
+    }
   };
 
-  const handleDeleteSuccess = (deletedId: string) => {
+  const handleDeleteSuccess = async (deletedId: string) => {
     setMembers((prev) => prev.filter((m) => m.id !== deletedId));
     showToast(
       'success',
       isKhmer ? 'បានលុបគណនីជាអចិន្ត្រៃយ៍!' : 'Account permanently removed!'
     );
+
+    // Refresh live Supabase state
+    try {
+      const refreshed = await fetchTeamFromApi();
+      if (Array.isArray(refreshed.users)) {
+        setMembers(refreshed.users);
+      }
+    } catch {
+      // optimistic update retained
+    }
   };
 
   // 1. Initial Loading Screen
@@ -527,30 +567,55 @@ export default function TeamManagementPage() {
         </div>
 
         {/* 1. Super Administrators Card (Universal Cross-Subject Access) */}
-        {unassignedAndSuperAdmins.length > 0 && (
-          <div className="bg-white dark:bg-slate-900 border border-blue-200/70 dark:border-blue-900/40 rounded-3xl shadow-lg overflow-hidden">
-            <div className="p-5 sm:p-6 bg-gradient-to-r from-blue-600/10 via-indigo-600/10 to-transparent border-b border-blue-100 dark:border-blue-900/30 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                    {isKhmer ? 'គណៈគ្រប់គ្រងជាន់ខ្ពស់ (Super Administrators)' : 'Super Administrators'}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {isKhmer
-                      ? 'មានសិទ្ធិអាន និងសរសេរពេញលេញលើគ្រប់មុខវិជ្ជា និងគណនីទាំងអស់'
-                      : 'Unrestricted universal read and write access across all 5 subjects and profiles.'}
-                  </p>
-                </div>
+        <div className="bg-white dark:bg-slate-900 border border-blue-200/70 dark:border-blue-900/40 rounded-3xl shadow-lg overflow-hidden">
+          <div className="p-5 sm:p-6 bg-gradient-to-r from-blue-600/10 via-indigo-600/10 to-transparent border-b border-blue-100 dark:border-blue-900/30 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
+                <ShieldCheck className="w-6 h-6" />
               </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                  {isKhmer ? 'គណៈគ្រប់គ្រងជាន់ខ្ពស់ (Super Administrators)' : 'Super Administrators'}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {isKhmer
+                    ? 'មានសិទ្ធិអាន និងសរសេរពេញលេញលើគ្រប់មុខវិជ្ជា និងគណនីទាំងអស់'
+                    : 'Unrestricted universal read and write access across all 5 subjects and profiles.'}
+                </p>
+              </div>
+            </div>
 
+            <div className="flex items-center gap-3">
               <span className="text-xs font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                 {unassignedAndSuperAdmins.length} {isKhmer ? 'គណនី' : 'Accounts'}
               </span>
+              <button
+                onClick={handleOpenGlobalAdd}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>{isKhmer ? '+ បន្ថែម Admin' : '+ Add Admin'}</span>
+              </button>
             </div>
+          </div>
 
+          {unassignedAndSuperAdmins.length === 0 ? (
+            <div className="p-8 text-center flex flex-col items-center justify-center">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center mb-3">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                {isKhmer
+                  ? 'មិនទាន់មានគណនី Super Admin ក្នុងមូលដ្ឋានទិន្នន័យនៅឡើយទេ'
+                  : 'No Super Admin profiles found in database'}
+              </h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                {isKhmer
+                  ? 'ចុចប៊ូតុងខាងលើដើម្បីបង្កើតគណនី Super Admin ថ្មីសម្រាប់ចូលគ្រប់គ្រងប្រព័ន្ធ'
+                  : 'Click above to create an authorized Super Admin account.'}
+              </p>
+            </div>
+          ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -629,8 +694,8 @@ export default function TeamManagementPage() {
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* 2. Five Core Subject Sections (Grouped Cleanly under respective subjects) */}
         <div className="space-y-6">

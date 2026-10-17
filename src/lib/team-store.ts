@@ -64,134 +64,60 @@ export function resolveSubjectCode(
   return null;
 }
 
-// Initial pre-seeded team members matching the official MoEYS curriculum department structure
-export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
-  {
-    id: 'staff-admin-1',
-    email: 'admin@moeys.gov.kh',
-    fullName: 'លោកបណ្ឌិត ជា សុវណ្ណ (Dr. Chea Sovann)',
-    role: 'super_admin',
-    assignedSubjectId: null,
-    assignedSubjectCode: null,
-    createdAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-math-lead',
-    email: 'math@moeys.gov.kh',
-    fullName: 'សាស្ត្រាចារ្យ ឡុង សុខា (Prof. Long Sokha)',
-    role: 'subject_lead',
-    assignedSubjectId: 'math',
-    assignedSubjectCode: 'math',
-    subjectNameKm: 'គណិតវិទ្យា',
-    subjectNameEn: 'Mathematics',
-    createdAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-math-member-1',
-    email: 'math.member@moeys.gov.kh',
-    fullName: 'អ្នកគ្រូ ចាន់ ស្រីមុំ (Ms. Chan Sreymom)',
-    role: 'subject_member',
-    assignedSubjectId: 'math',
-    assignedSubjectCode: 'math',
-    subjectNameKm: 'គណិតវិទ្យា',
-    subjectNameEn: 'Mathematics',
-    createdAt: '2026-01-15T08:30:00Z',
-  },
-  {
-    id: 'staff-phys-lead',
-    email: 'physics@moeys.gov.kh',
-    fullName: 'លោកស្រី គឹម សុផល (Mrs. Kim Sophal)',
-    role: 'subject_lead',
-    assignedSubjectId: 'physics',
-    assignedSubjectCode: 'physics',
-    subjectNameKm: 'រូបវិទ្យា',
-    subjectNameEn: 'Physics',
-    createdAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-phys-member-1',
-    email: 'physics.member@moeys.gov.kh',
-    fullName: 'លោក ហេង វុទ្ធី (Mr. Heng Vuthy)',
-    role: 'subject_member',
-    assignedSubjectId: 'physics',
-    assignedSubjectCode: 'physics',
-    subjectNameKm: 'រូបវិទ្យា',
-    subjectNameEn: 'Physics',
-    createdAt: '2026-01-20T09:00:00Z',
-  },
-  {
-    id: 'staff-chem-lead',
-    email: 'chemistry@moeys.gov.kh',
-    fullName: 'លោក វ៉ាន់ រតនា (Mr. Vann Rattana)',
-    role: 'subject_lead',
-    assignedSubjectId: 'chemistry',
-    assignedSubjectCode: 'chemistry',
-    subjectNameKm: 'គីមីវិទ្យា',
-    subjectNameEn: 'Chemistry',
-    createdAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-bio-lead',
-    email: 'biology@moeys.gov.kh',
-    fullName: 'លោកស្រី សេង គន្ធា (Mrs. Seng Kunthea)',
-    role: 'subject_lead',
-    assignedSubjectId: 'biology',
-    assignedSubjectCode: 'biology',
-    subjectNameKm: 'ជីវវិទ្យា',
-    subjectNameEn: 'Biology',
-    createdAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-eng-lead',
-    email: 'english@moeys.gov.kh',
-    fullName: 'លោក ដារ៉ា សិទ្ធិ (Mr. Dara Sethi)',
-    role: 'subject_lead',
-    assignedSubjectId: 'english',
-    assignedSubjectCode: 'english',
-    subjectNameKm: 'ភាសាអង់គ្លេស',
-    subjectNameEn: 'English',
-    createdAt: '2026-01-01T00:00:00Z',
-  },
-];
+// Purge legacy mock data IDs
+const isMockMember = (m: any) =>
+  !m ||
+  (typeof m.id === 'string' && m.id.startsWith('staff-')) ||
+  m.email === 'math@moeys.gov.kh' ||
+  m.email === 'math.member@moeys.gov.kh' ||
+  m.email === 'physics@moeys.gov.kh' ||
+  m.email === 'physics.member@moeys.gov.kh' ||
+  m.email === 'chemistry@moeys.gov.kh' ||
+  m.email === 'biology@moeys.gov.kh' ||
+  m.email === 'english@moeys.gov.kh';
 
 /**
- * Returns stored team members from local storage or initial seed
+ * Returns stored team members from local storage (filtered of any legacy mock entries)
  */
 export function getStoredTeamMembers(): SubjectTeamMember[] {
-  if (typeof window === 'undefined') return INITIAL_TEAM_MEMBERS;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_TEAM_MEMBERS);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY_TEAM_MEMBERS, JSON.stringify(INITIAL_TEAM_MEMBERS));
-      return INITIAL_TEAM_MEMBERS;
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.map((m: SubjectTeamMember) => ({
-        ...m,
-        assignedSubjectCode: m.assignedSubjectCode || resolveSubjectCode(m.assignedSubjectId),
-      }));
+    if (Array.isArray(parsed)) {
+      // Filter out any legacy mock accounts
+      const realOnly = parsed
+        .filter((m: any) => !isMockMember(m))
+        .map((m: SubjectTeamMember) => ({
+          ...m,
+          assignedSubjectCode: m.assignedSubjectCode || resolveSubjectCode(m.assignedSubjectId),
+        }));
+      return realOnly;
     }
-    return INITIAL_TEAM_MEMBERS;
+    return [];
   } catch {
-    return INITIAL_TEAM_MEMBERS;
+    return [];
   }
 }
 
 /**
- * Saves team members locally and syncs with staff accounts
+ * Saves real team members locally and syncs with staff accounts
  */
 export function saveStoredTeamMembers(members: SubjectTeamMember[]): void {
   if (typeof window === 'undefined') return;
   try {
-    const enriched = members.map((m) => ({
+    const cleanMembers = members.filter((m) => !isMockMember(m));
+    const enriched = cleanMembers.map((m) => ({
       ...m,
       assignedSubjectCode: m.assignedSubjectCode || resolveSubjectCode(m.assignedSubjectId),
     }));
 
     localStorage.setItem(STORAGE_KEY_TEAM_MEMBERS, JSON.stringify(enriched));
 
-    // Synchronize with general staff accounts store so dashboard reflects changes
+    // Synchronize with general staff accounts store so dashboard reflects real changes
     const staffAccounts: StaffAccount[] = enriched.map((m) => {
       const subjectAssigned = m.assignedSubjectCode || (m.assignedSubjectId as SubjectId) || null;
       return {
@@ -243,7 +169,7 @@ async function getAuthHeaders(): Promise<HeadersInit> {
 }
 
 /**
- * Fetches all team members and subjects from backend API
+ * Fetches all team members directly from backend API connected to Supabase
  */
 export async function fetchTeamFromApi(): Promise<{
   users: SubjectTeamMember[];
@@ -258,12 +184,17 @@ export async function fetchTeamFromApi(): Promise<{
 
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data.users) && data.users.length > 0) {
-        const subjects: SubjectInfo[] = data.subjects || [];
-        const mappedUsers: SubjectTeamMember[] = data.users.map((u: any) => {
+      const subjects: SubjectInfo[] = data.subjects || [];
+      const rawUsers: any[] = Array.isArray(data.users) ? data.users : [];
+
+      const mappedUsers: SubjectTeamMember[] = rawUsers
+        .filter((u: any) => !isMockMember(u))
+        .map((u: any) => {
           const rawSubj = u.assigned_subject_id || u.subject_assigned || null;
           const subjCode =
-            u.assigned_subject_code || resolveSubjectCode(rawSubj, subjects);
+            u.assigned_subject_code ||
+            (u.subjects && u.subjects.code) ||
+            resolveSubjectCode(rawSubj, subjects);
 
           return {
             id: u.id || u.user_id,
@@ -272,20 +203,19 @@ export async function fetchTeamFromApi(): Promise<{
             role: u.role,
             assignedSubjectId: rawSubj,
             assignedSubjectCode: subjCode,
-            subjectNameKm: u.subject_name_km,
-            subjectNameEn: u.subject_name_en,
+            subjectNameKm: u.subject_name_km || (u.subjects && u.subjects.name_km),
+            subjectNameEn: u.subject_name_en || (u.subjects && u.subjects.name_en),
             createdAt: u.created_at || new Date().toISOString(),
             updatedAt: u.updated_at,
           };
         });
 
-        // Update local cache
-        saveStoredTeamMembers(mappedUsers);
-        return { users: mappedUsers, subjects };
-      }
+      // Update local storage with real Supabase profiles
+      saveStoredTeamMembers(mappedUsers);
+      return { users: mappedUsers, subjects };
     }
   } catch (err) {
-    console.warn('API fetch team error, using local fallback:', err);
+    console.warn('API fetch team error:', err);
   }
 
   return {

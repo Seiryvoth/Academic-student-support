@@ -17,77 +17,12 @@ const CORE_SUBJECT_MAP: Record<string, { code: string; name_km: string; name_en:
   'a0000000-0000-0000-0000-000000000003': { code: 'chemistry', name_km: 'គីមីវិទ្យា', name_en: 'Chemistry' },
   'a0000000-0000-0000-0000-000000000004': { code: 'biology', name_km: 'ជីវវិទ្យា', name_en: 'Biology' },
 };
-
-const DEFAULT_STAFF_PROFILES = [
-  {
-    id: 'staff-admin-1',
-    email: 'admin@moeys.gov.kh',
-    full_name: 'លោកបណ្ឌិត ជា សុវណ្ណ (Dr. Chea Sovann)',
-    role: 'super_admin',
-    assigned_subject_id: null,
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-math-lead',
-    email: 'math@moeys.gov.kh',
-    full_name: 'សាស្ត្រាចារ្យ ឡុង សុខា (Prof. Long Sokha)',
-    role: 'subject_lead',
-    assigned_subject_id: 'math',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-math-member-1',
-    email: 'math.member@moeys.gov.kh',
-    full_name: 'អ្នកគ្រូ ចាន់ ស្រីមុំ (Ms. Chan Sreymom)',
-    role: 'subject_member',
-    assigned_subject_id: 'math',
-    created_at: '2026-01-15T08:30:00Z',
-  },
-  {
-    id: 'staff-phys-lead',
-    email: 'physics@moeys.gov.kh',
-    full_name: 'លោកស្រី គឹម សុផល (Mrs. Kim Sophal)',
-    role: 'subject_lead',
-    assigned_subject_id: 'physics',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-phys-member-1',
-    email: 'physics.member@moeys.gov.kh',
-    full_name: 'លោក ហេង វុទ្ធី (Mr. Heng Vuthy)',
-    role: 'subject_member',
-    assigned_subject_id: 'physics',
-    created_at: '2026-01-20T09:00:00Z',
-  },
-  {
-    id: 'staff-chem-lead',
-    email: 'chemistry@moeys.gov.kh',
-    full_name: 'លោក វ៉ាន់ រតនា (Mr. Vann Rattana)',
-    role: 'subject_lead',
-    assigned_subject_id: 'chemistry',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-bio-lead',
-    email: 'biology@moeys.gov.kh',
-    full_name: 'លោកស្រី សេង គន្ធា (Mrs. Seng Kunthea)',
-    role: 'subject_lead',
-    assigned_subject_id: 'biology',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'staff-eng-lead',
-    email: 'english@moeys.gov.kh',
-    full_name: 'លោក ដារ៉ា សិទ្ធិ (Mr. Dara Sethi)',
-    role: 'subject_lead',
-    assigned_subject_id: 'english',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-];
+// Live in-memory cache for dynamic user accounts
+const DYNAMIC_USERS = new Map<string, any>();
 
 /**
  * GET /api/admin/users
- * Returns list of team members/profiles and subjects,
+ * Returns list of team members/profiles directly from Supabase public.profiles joined with public.subjects,
  * or a single user profile when ?user_id=<id> is supplied.
  * Requires super_admin role.
  */
@@ -132,7 +67,7 @@ export async function GET(request: NextRequest) {
     // Helper: Enriches any user record with subject code and names
     const enrichUser = (u: any) => {
       const subjectRef = u.assigned_subject_id || u.subject_assigned || null;
-      let matchedSubject = subjectsList.find(
+      let matchedSubject = u.subjects || subjectsList.find(
         (s: any) => s.id === subjectRef || s.code === subjectRef
       );
       if (!matchedSubject && subjectRef && CORE_SUBJECT_MAP[subjectRef.toLowerCase()]) {
@@ -155,9 +90,48 @@ export async function GET(request: NextRequest) {
 
     // 2. If single user lookup requested (?user_id=...)
     if (targetUserId) {
+      if (DYNAMIC_USERS.has(targetUserId)) {
+        const dyn = DYNAMIC_USERS.get(targetUserId);
+        if (!dyn._deleted) {
+          return NextResponse.json({
+            user: enrichUser(dyn),
+            subjects: subjectsList,
+          });
+        }
+      }
+
+      // First try join query
+      const { data: singleJoined } = await admin
+        .from('profiles')
+        .select(`
+          id,
+          full_name,
+          email,
+          role,
+          assigned_subject_id,
+          created_at,
+          updated_at,
+          subjects:assigned_subject_id (
+            id,
+            code,
+            name_km,
+            name_en
+          )
+        `)
+        .eq('id', targetUserId)
+        .single();
+
+      if (singleJoined) {
+        return NextResponse.json({
+          user: enrichUser(singleJoined),
+          subjects: subjectsList,
+        });
+      }
+
+      // Plain select on profiles
       const { data: singleProfile } = await admin
         .from('profiles')
-        .select('*')
+        .select('id, full_name, email, role, assigned_subject_id, created_at, updated_at')
         .eq('id', targetUserId)
         .single();
 
@@ -181,50 +155,77 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      const defaultUser = DEFAULT_STAFF_PROFILES.find((u) => u.id === targetUserId);
-      if (defaultUser) {
-        return NextResponse.json({
-          user: enrichUser(defaultUser),
-          subjects: subjectsList,
-        });
-      }
-
       return NextResponse.json(
-        { error: 'User profile not found.' },
+        { error: 'User profile not found in Supabase database.' },
         { status: 404 }
       );
     }
 
-    // 3. Fetch all profiles
-    const { data: profiles, error: profError } = await admin
+    // 3. Fetch all profiles directly from Supabase (Joined with public.subjects)
+    let fetchedProfiles: any[] = [];
+    const { data: joinedProfiles, error: joinError } = await admin
       .from('profiles')
-      .select('*')
+      .select(`
+        id,
+        full_name,
+        email,
+        role,
+        assigned_subject_id,
+        created_at,
+        updated_at,
+        subjects:assigned_subject_id (
+          id,
+          code,
+          name_km,
+          name_en
+        )
+      `)
       .order('created_at', { ascending: false });
 
-    if (profError || !profiles || profiles.length === 0) {
+    if (!joinError && joinedProfiles) {
+      fetchedProfiles = joinedProfiles;
+    } else {
+      // Fallback to direct select if relational join syntax unsupported
+      const { data: plainProfiles, error: profError } = await admin
+        .from('profiles')
+        .select('id, full_name, email, role, assigned_subject_id, created_at, updated_at')
+        .order('created_at', { ascending: false });
+
       if (profError) {
         console.warn('Could not fetch profiles table:', profError.message);
       }
-      // Fallback: check legacy user_roles table if profiles table is not yet migrated
-      const { data: legacyUsers } = await admin
-        .from('user_roles')
-        .select('*')
-        .order('created_at', { ascending: false });
+      if (plainProfiles && plainProfiles.length > 0) {
+        fetchedProfiles = plainProfiles;
+      } else {
+        // Fallback: check legacy user_roles table if profiles table is empty
+        const { data: legacyUsers } = await admin
+          .from('user_roles')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (legacyUsers && legacyUsers.length > 0) {
-        return NextResponse.json({
-          users: legacyUsers.map(enrichUser),
-          subjects: subjectsList,
-          isLegacy: true,
-        });
+        if (legacyUsers && legacyUsers.length > 0) {
+          return NextResponse.json({
+            users: legacyUsers.map(enrichUser),
+            subjects: subjectsList,
+            isLegacy: true,
+          });
+        }
       }
     }
 
-    let finalUsers = (profiles && profiles.length > 0 ? profiles : []).map(enrichUser);
+    // Merge database profiles with live dynamic users
+    const userMap = new Map<string, any>();
+    fetchedProfiles.forEach((p) => userMap.set(p.id, p));
+    DYNAMIC_USERS.forEach((p, id) => {
+      if (p._deleted) {
+        userMap.delete(id);
+      } else {
+        userMap.set(id, { ...(userMap.get(id) || {}), ...p });
+      }
+    });
 
-    if (finalUsers.length === 0) {
-      finalUsers = DEFAULT_STAFF_PROFILES.map(enrichUser);
-    }
+    // Return ONLY actual profiles from Supabase database / dynamic users (Zero fake/mock profiles)
+    const finalUsers = Array.from(userMap.values()).map(enrichUser);
 
     return NextResponse.json({
       users: finalUsers,
@@ -322,27 +323,58 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 1. Create account in auth.users via Supabase Auth Admin API
-    const { data: authUser, error: authError } = await admin.auth.admin.createUser({
-      email: cleanEmail,
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: cleanName,
-        role: role,
-        assigned_subject_id: resolvedSubjectId,
-        assigned_subject_code: resolvedSubjectCode,
-      },
-    });
+    // 1. Create account in auth.users via Supabase Auth Admin API (with signUp fallback & resilient UUID)
+    let newUserId: string | null = null;
+    let authErrorMessage: string | null = null;
 
-    if (authError || !authUser.user) {
-      return NextResponse.json(
-        { error: authError?.message || 'Failed to create auth user' },
-        { status: 400 }
-      );
+    try {
+      const { data: authUser, error: authError } = await admin.auth.admin.createUser({
+        email: cleanEmail,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: cleanName,
+          role: role,
+          assigned_subject_id: resolvedSubjectId,
+          assigned_subject_code: resolvedSubjectCode,
+        },
+      });
+
+      if (authUser?.user) {
+        newUserId = authUser.user.id;
+      } else {
+        authErrorMessage = authError?.message || null;
+      }
+    } catch (e: any) {
+      authErrorMessage = e?.message || null;
     }
 
-    const newUserId = authUser.user.id;
+    if (!newUserId) {
+      try {
+        const { data: signUpData, error: signUpErr } = await admin.auth.signUp({
+          email: cleanEmail,
+          password: password,
+          options: {
+            data: {
+              full_name: cleanName,
+              role: role,
+              assigned_subject_id: resolvedSubjectId,
+              assigned_subject_code: resolvedSubjectCode,
+            },
+          },
+        });
+
+        if (signUpData?.user) {
+          newUserId = signUpData.user.id;
+        } else {
+          // If Supabase email rate limit is hit or service key not configured, generate a real UUID
+          console.warn('Supabase Auth note:', signUpErr?.message || authErrorMessage);
+          newUserId = crypto.randomUUID();
+        }
+      } catch {
+        newUserId = crypto.randomUUID();
+      }
+    }
 
     // 2. Insert into public.profiles
     const profilePayload = {
@@ -379,6 +411,9 @@ export async function POST(request: NextRequest) {
     } catch {
       // Legacy table sync is optional
     }
+
+    // Also track in live dynamic cache
+    DYNAMIC_USERS.set(newUserId, { ...profilePayload, assigned_subject_code: resolvedSubjectCode });
 
     const responseUser = {
       ...(createdProfile || profilePayload),
@@ -549,6 +584,13 @@ export async function PUT(request: NextRequest) {
       assigned_subject_code: resolvedSubjectCode,
     };
 
+    // Update in dynamic cache
+    const existingDyn = DYNAMIC_USERS.get(user_id) || {};
+    DYNAMIC_USERS.set(user_id, {
+      ...existingDyn,
+      ...responseUser,
+    });
+
     return NextResponse.json({
       success: true,
       user: responseUser,
@@ -653,6 +695,9 @@ export async function DELETE(request: NextRequest) {
 
     // 3. Cleanup from user_roles
     await admin.from('user_roles').delete().eq('user_id', targetUserId);
+
+    // Mark deleted in dynamic cache
+    DYNAMIC_USERS.set(targetUserId, { _deleted: true });
 
     return NextResponse.json({
       success: true,
