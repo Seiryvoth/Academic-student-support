@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   ShieldCheck,
   UserCheck,
@@ -2060,6 +2061,14 @@ export default function StaffDashboardPage() {
                     : 'Manage role assignments, activation status, and departmental locks.'}
                 </p>
               </div>
+
+              <Link
+                href="/admin/team-management"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <Users className="w-4 h-4" />
+                <span>{isKhmer ? 'គ្រប់គ្រងក្រុមការងារ & គណនីពេញលេញ →' : 'Team & Account Module →'}</span>
+              </Link>
             </div>
 
             <div className="divide-y divide-slate-100 dark:divide-slate-800">

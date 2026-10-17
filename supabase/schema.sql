@@ -382,3 +382,85 @@ CREATE POLICY "Staff Insert Activity Notifications"
     ON public.activity_notifications FOR INSERT
     WITH CHECK (TRUE);
 
+-- 9. SUBJECTS AND PROFILES RBAC ARCHITECTURE
+-- ====================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+        CREATE TYPE public.user_role AS ENUM ('super_admin', 'subject_lead', 'subject_member', 'student');
+    ELSE
+        ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'super_admin';
+        ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'subject_lead';
+        ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'subject_member';
+        ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'student';
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS public.subjects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code TEXT NOT NULL UNIQUE,
+    name_km TEXT NOT NULL,
+    name_en TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO public.subjects (id, code, name_km, name_en)
+VALUES
+    ('a0000000-0000-0000-0000-000000000001', 'math', 'គណិតវិទ្យា', 'Mathematics'),
+    ('a0000000-0000-0000-0000-000000000002', 'physics', 'រូបវិទ្យា', 'Physics'),
+    ('a0000000-0000-0000-0000-000000000003', 'chemistry', 'គីមីវិទ្យា', 'Chemistry'),
+    ('a0000000-0000-0000-0000-000000000004', 'biology', 'ជីវវិទ្យា', 'Biology'),
+    ('a0000000-0000-0000-0000-000000000005', 'english', 'ភាសាអង់គ្លេស', 'English')
+ON CONFLICT (code) DO UPDATE
+SET name_km = EXCLUDED.name_km,
+    name_en = EXCLUDED.name_en;
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT UNIQUE NOT NULL,
+    full_name TEXT NOT NULL,
+    role public.user_role NOT NULL DEFAULT 'student',
+    assigned_subject_id UUID REFERENCES public.subjects(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_assigned_subject ON public.profiles(assigned_subject_id);
+
+ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public and authenticated can read subjects" ON public.subjects;
+CREATE POLICY "Public and authenticated can read subjects"
+    ON public.subjects FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Super admin can manage subjects" ON public.subjects;
+CREATE POLICY "Super admin can manage subjects"
+    ON public.subjects FOR ALL TO authenticated
+    USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
+
+DROP POLICY IF EXISTS "Super admin full access on profiles" ON public.profiles;
+CREATE POLICY "Super admin full access on profiles"
+    ON public.profiles FOR ALL TO authenticated
+    USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
+
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
+CREATE POLICY "Users can view own profile"
+    ON public.profiles FOR SELECT TO authenticated
+    USING (id = auth.uid());
+
+DROP POLICY IF EXISTS "Subject team members can view subject peers" ON public.profiles;
+CREATE POLICY "Subject team members can view subject peers"
+    ON public.profiles FOR SELECT TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles caller
+            WHERE caller.id = auth.uid()
+              AND caller.role IN ('subject_lead', 'subject_member')
+              AND caller.assigned_subject_id IS NOT NULL
+              AND caller.assigned_subject_id = public.profiles.assigned_subject_id
+        )
+    );
+

@@ -18,6 +18,7 @@ import {
   UserCheck,
   ChevronRight,
   ShieldCheck,
+  Users,
 } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
 import { getCurrentStaffSession, setCurrentStaffSession, StaffAccount } from '@/lib/data-store';
@@ -213,6 +214,16 @@ export const Navbar: React.FC = () => {
               {/* Staff Access / Login Button */}
               {staffSession ? (
                 <div className="hidden sm:flex items-center gap-2">
+                  {staffSession.role === 'super_admin' && (
+                    <Link
+                      href="/admin/team-management"
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all shadow-2xs"
+                      title={isKhmer ? 'គ្រប់គ្រងក្រុមការងារ & គណនី' : 'Subject Team & Account Management'}
+                    >
+                      <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>{isKhmer ? 'ក្រុមការងារ' : 'Teams'}</span>
+                    </Link>
+                  )}
                   <Link
                     href="/dashboard"
                     className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all"
@@ -334,6 +345,21 @@ export const Navbar: React.FC = () => {
             <div className="flex flex-col gap-2">
               {staffSession ? (
                 <>
+                  {staffSession.role === 'super_admin' && (
+                    <Link
+                      href="/admin/team-management"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <span>{isKhmer ? 'គ្រប់គ្រងក្រុមការងារ & គណនី' : 'Subject Team Management'}</span>
+                      </div>
+                      <span className="text-xs uppercase font-bold px-2 py-0.5 rounded-md bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100">
+                        Admin
+                      </span>
+                    </Link>
+                  )}
                   <Link
                     href="/dashboard"
                     onClick={() => setMobileMenuOpen(false)}

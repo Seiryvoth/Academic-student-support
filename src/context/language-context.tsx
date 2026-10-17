@@ -57,6 +57,12 @@ export interface Translations {
   dismiss: string;
   superAdmin: string;
   subjectLead: string;
+  subjectMember: string;
+  teamManagement: string;
+  teamManagementDesc: string;
+  addMember: string;
+  editMember: string;
+  deleteMember: string;
   addVideoLesson: string;
   editVideoLesson: string;
   manageStaff: string;
@@ -220,6 +226,12 @@ const TRANSLATIONS: Record<Language, Translations> = {
     dismiss: 'ពេលក្រោយ',
     superAdmin: 'អ្នកគ្រប់គ្រងប្រព័ន្ធជាន់ខ្ពស់ (Super Admin)',
     subjectLead: 'ប្រធានដេប៉ាតឺម៉ង់មុខវិជ្ជា (Subject Lead)',
+    subjectMember: 'សមាជិកក្រុមការងារមុខវិជ្ជា (Subject Member)',
+    teamManagement: 'គ្រប់គ្រងក្រុមការងារមុខវិជ្ជា & គណនី (Team Management)',
+    teamManagementDesc: 'គ្រប់គ្រងសមាជិកក្រុមតាមមុខវិជ្ជានីមួយៗ ចាត់តាំងតួនាទី និងកំណត់ពាក្យសម្ងាត់',
+    addMember: '+ បន្ថែមសមាជិក / Add Member',
+    editMember: 'កែសម្រួលព័ត៌មានគណនី',
+    deleteMember: 'លុបគណនីជាអចិន្ត្រៃយ៍',
     addVideoLesson: 'បន្ថែមមេរៀនវីដេអូថ្មី',
     editVideoLesson: 'កែសម្រួលមេរៀន',
     manageStaff: 'គ្រប់គ្រងគណនីគ្រូ',
@@ -381,6 +393,12 @@ const TRANSLATIONS: Record<Language, Translations> = {
     dismiss: 'Later',
     superAdmin: 'Super Administrator',
     subjectLead: 'Subject Department Lead',
+    subjectMember: 'Subject Team Member',
+    teamManagement: 'Subject Team & Account Management',
+    teamManagementDesc: 'Manage subject team members, role assignments, and account credentials',
+    addMember: '+ Add Member',
+    editMember: 'Edit Account',
+    deleteMember: 'Delete Account Permanently',
     addVideoLesson: 'Add Video Lesson',
     editVideoLesson: 'Edit Lesson',
     manageStaff: 'Manage Staff Accounts',

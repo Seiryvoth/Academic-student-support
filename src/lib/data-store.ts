@@ -43,7 +43,7 @@ export interface StaffAccount {
   email: string;
   fullNameKm: string;
   fullNameEn: string;
-  role: 'super_admin' | 'subject_lead' | 'student';
+  role: 'super_admin' | 'subject_lead' | 'subject_member' | 'student';
   subjectAssigned: SubjectId | null; // null for super_admin and student
   isActive: boolean;
   createdAt: string;
@@ -811,7 +811,7 @@ export async function deleteCustomLesson(id: string): Promise<boolean> {
 export function canManageSubject(staff: StaffAccount | null, subject: SubjectId): boolean {
   if (!staff || !staff.isActive) return false;
   if (staff.role === 'super_admin') return true;
-  if (staff.role === 'subject_lead') {
+  if (staff.role === 'subject_lead' || staff.role === 'subject_member') {
     return !staff.subjectAssigned || staff.subjectAssigned === subject;
   }
   return false;

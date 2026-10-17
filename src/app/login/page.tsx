@@ -42,7 +42,10 @@ export default function LoginPage() {
 
     if (account.role === 'super_admin') {
       router.push('/dashboard');
-    } else if (account.role === 'subject_lead' && account.subjectAssigned) {
+    } else if (
+      (account.role === 'subject_lead' || account.role === 'subject_member') &&
+      account.subjectAssigned
+    ) {
       router.push(`/dashboard?subject=${account.subjectAssigned}`);
     } else {
       router.push('/dashboard');
@@ -140,8 +143,61 @@ export default function LoginPage() {
           return;
         }
 
-        // Step 2: Query user_roles table using user ID
+        // Step 2: Query profiles table or user_roles table using user ID
         if (authData?.user) {
+          // A. Try modern public.profiles table first
+          let profileRecord: any = null;
+          let assignedSubjectCode: SubjectId | null = null;
+
+          try {
+            const { data: prof, error: profErr } = await supabase
+              .from('profiles')
+              .select('*, subjects(code)')
+              .eq('id', authData.user.id)
+              .single();
+
+            if (!profErr && prof) {
+              profileRecord = prof;
+              if (prof.subjects?.code && prof.subjects.code in SUBJECTS) {
+                assignedSubjectCode = prof.subjects.code as SubjectId;
+              } else if (prof.assigned_subject_id && prof.assigned_subject_id in SUBJECTS) {
+                assignedSubjectCode = prof.assigned_subject_id as SubjectId;
+              }
+            }
+          } catch {
+            // profiles table may not yet be created or accessible
+          }
+
+          if (profileRecord) {
+            // Guardrail: Student accounts are not staff
+            if (profileRecord.role === 'student') {
+              await supabase.auth.signOut();
+              setError(
+                isKhmer
+                  ? 'គណនីសិស្សមិនចាំបាច់ចូលក្នុងផ្ទាំងគ្រប់គ្រងគ្រូទេ។ អ្នកអាចចូលរៀនមេរៀន និងធ្វើលំហាត់បានដោយសេរីនៅទំព័រដើម។'
+                  : 'Student accounts do not require staff login. You can freely access video lessons and exercises from the homepage.'
+              );
+              setLoading(false);
+              return;
+            }
+
+            const staffAccount: StaffAccount = {
+              id: profileRecord.id,
+              email: profileRecord.email || cleanEmail,
+              fullNameKm: profileRecord.full_name || 'គ្រូបង្រៀន MoEYS',
+              fullNameEn: profileRecord.full_name || 'MoEYS Staff',
+              role: profileRecord.role as 'super_admin' | 'subject_lead' | 'subject_member',
+              subjectAssigned: profileRecord.role === 'super_admin' ? null : assignedSubjectCode,
+              isActive: true,
+              createdAt: profileRecord.created_at || new Date().toISOString(),
+            };
+
+            handleRedirectAndSave(staffAccount);
+            setLoading(false);
+            return;
+          }
+
+          // B. Fallback to legacy user_roles table
           const { data: roleData, error: roleError } = await supabase
             .from('user_roles')
             .select('*')
@@ -163,8 +219,8 @@ export default function LoginPage() {
               await supabase.auth.signOut();
               setError(
                 isKhmer
-                  ? 'គណនីរបស់អ្នកមិនមានសិទ្ធិចូលជាគ្រូ ឬគណៈគ្រប់គ្រងក្នុងតារាង user_roles ទេ។ សូមទាក់ទង Super Admin។'
-                  : 'Authenticated successfully, but no staff role found in user_roles table. Please contact your Super Administrator.'
+                  ? 'គណនីរបស់អ្នកមិនមានសិទ្ធិចូលជាគ្រូ ឬគណៈគ្រប់គ្រងក្នុងប្រព័ន្ធទេ។ សូមទាក់ទង Super Admin។'
+                  : 'Authenticated successfully, but no staff role found in platform records. Please contact your Super Administrator.'
               );
               setLoading(false);
               return;
@@ -187,7 +243,7 @@ export default function LoginPage() {
               email: matchedRole.email || cleanEmail,
               fullNameKm: matchedRole.full_name || 'គ្រូបង្រៀន MoEYS',
               fullNameEn: matchedRole.full_name || 'MoEYS Staff',
-              role: matchedRole.role as 'super_admin' | 'subject_lead',
+              role: matchedRole.role as 'super_admin' | 'subject_lead' | 'subject_member',
               subjectAssigned: (matchedRole.subject_assigned as SubjectId) || null,
               isActive: matchedRole.is_active !== false,
               createdAt: matchedRole.created_at || new Date().toISOString(),
@@ -216,7 +272,7 @@ export default function LoginPage() {
             email: roleData.email || cleanEmail,
             fullNameKm: roleData.full_name || 'គ្រូបង្រៀន MoEYS',
             fullNameEn: roleData.full_name || 'MoEYS Staff',
-            role: roleData.role as 'super_admin' | 'subject_lead',
+            role: roleData.role as 'super_admin' | 'subject_lead' | 'subject_member',
             subjectAssigned: (roleData.subject_assigned as SubjectId) || null,
             isActive: roleData.is_active !== false,
             createdAt: roleData.created_at || new Date().toISOString(),
