@@ -55,6 +55,19 @@ export async function verifySuperAdmin(req: Request): Promise<VerificationResult
     try {
       const { data: { user }, error: userError } = await adminClient.auth.getUser(token);
       if (user && !userError) {
+        // Fast-path: Check metadata or admin email
+        if (
+          user.user_metadata?.role === 'super_admin' ||
+          user.email?.toLowerCase() === 'admin@moeys.gov.kh'
+        ) {
+          return {
+            authorized: true,
+            callerId: user.id,
+            callerEmail: user.email,
+            statusCode: 200,
+          };
+        }
+
         // Query profiles table for role
         const { data: profile } = await adminClient
           .from('profiles')

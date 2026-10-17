@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Lock,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
 import { SUBJECTS, SubjectId } from '@/lib/curriculum-data';
@@ -27,6 +29,8 @@ import {
   getStoredTeamMembers,
   saveStoredTeamMembers,
   fetchTeamFromApi,
+  fetchTeamMemberByIdApi,
+  resolveSubjectCode,
 } from '@/lib/team-store';
 import { SubjectTeamCard } from '@/components/admin/SubjectTeamCard';
 import { AddTeamMemberModal } from '@/components/admin/AddTeamMemberModal';
@@ -156,7 +160,7 @@ export default function TeamManagementPage() {
     });
   }, [members, searchQuery, roleFilter]);
 
-  // Group members by subject
+  // Group members dynamically by subject
   const membersBySubject = useMemo(() => {
     const grouped: Record<SubjectId, SubjectTeamMember[]> = {
       math: [],
@@ -167,8 +171,12 @@ export default function TeamManagementPage() {
     };
 
     filteredMembers.forEach((m) => {
-      if (m.assignedSubjectId && m.assignedSubjectId in grouped) {
-        grouped[m.assignedSubjectId as SubjectId].push(m);
+      const code = resolveSubjectCode(m.assignedSubjectCode || m.assignedSubjectId);
+      if (code && code in grouped && m.role !== 'super_admin') {
+        grouped[code].push({
+          ...m,
+          assignedSubjectCode: code,
+        });
       }
     });
 
@@ -177,9 +185,11 @@ export default function TeamManagementPage() {
 
   // Super admins or unassigned staff
   const unassignedAndSuperAdmins = useMemo(() => {
-    return filteredMembers.filter(
-      (m) => m.role === 'super_admin' || !m.assignedSubjectId || !(m.assignedSubjectId in SUBJECTS)
-    );
+    return filteredMembers.filter((m) => {
+      if (m.role === 'super_admin') return true;
+      const code = resolveSubjectCode(m.assignedSubjectCode || m.assignedSubjectId);
+      return !code || !(code in SUBJECTS);
+    });
   }, [filteredMembers]);
 
   // Statistics
@@ -202,9 +212,21 @@ export default function TeamManagementPage() {
     setAddModalOpen(true);
   };
 
-  const handleOpenEdit = (member: SubjectTeamMember) => {
+  // Edit action with instant pre-filling and background freshest fetch
+  const handleOpenEdit = async (member: SubjectTeamMember) => {
+    // 1. Instantly populate the Edit modal with that user's exact current information
     setEditingMember(member);
     setEditModalOpen(true);
+
+    // 2. Fetch freshest profile in background to guarantee zero staleness
+    try {
+      const fresh = await fetchTeamMemberByIdApi(member.id);
+      if (fresh) {
+        setEditingMember(fresh);
+      }
+    } catch {
+      // Keep existing data if network error
+    }
   };
 
   const handleOpenDelete = (member: SubjectTeamMember) => {
@@ -212,7 +234,16 @@ export default function TeamManagementPage() {
     setDeleteDialogOpen(true);
   };
 
+  // Optimistic UI updates (No page refresh needed)
   const handleAddSuccess = (newMember: SubjectTeamMember) => {
+    setMembers((prev) => [
+      newMember,
+      ...prev.filter(
+        (m) =>
+          m.id !== newMember.id &&
+          m.email.toLowerCase() !== newMember.email.toLowerCase()
+      ),
+    ]);
     showToast(
       'success',
       isKhmer
@@ -222,6 +253,9 @@ export default function TeamManagementPage() {
   };
 
   const handleEditSuccess = (updated: SubjectTeamMember) => {
+    setMembers((prev) =>
+      prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+    );
     showToast(
       'success',
       isKhmer
@@ -230,7 +264,8 @@ export default function TeamManagementPage() {
     );
   };
 
-  const handleDeleteSuccess = () => {
+  const handleDeleteSuccess = (deletedId: string) => {
+    setMembers((prev) => prev.filter((m) => m.id !== deletedId));
     showToast(
       'success',
       isKhmer ? 'បានលុបគណនីជាអចិន្ត្រៃយ៍!' : 'Account permanently removed!'
@@ -272,14 +307,14 @@ export default function TeamManagementPage() {
           <div className="mt-6 flex flex-col sm:flex-row gap-3">
             <Link
               href="/login"
-              className="flex-1 py-3 px-4 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md transition-all flex items-center justify-center gap-2"
+              className="flex-1 py-3 px-4 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Lock className="w-4 h-4" />
               <span>{isKhmer ? 'ចូលប្រព័ន្ធគ្រូ' : 'Staff Login'}</span>
             </Link>
             <Link
               href="/"
-              className="flex-1 py-3 px-4 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+              className="flex-1 py-3 px-4 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>{isKhmer ? 'ទំព័រដើម' : 'Home'}</span>
@@ -299,8 +334,8 @@ export default function TeamManagementPage() {
           <div
             className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-xs font-bold border backdrop-blur-md ${
               toastMessage.type === 'success'
-                ? 'bg-emerald-500/90 text-white border-emerald-400'
-                : 'bg-rose-500/90 text-white border-rose-400'
+                ? 'bg-emerald-500/95 text-white border-emerald-400 shadow-emerald-500/20'
+                : 'bg-rose-500/95 text-white border-rose-400 shadow-rose-500/20'
             }`}
           >
             {toastMessage.type === 'success' ? (
@@ -324,7 +359,7 @@ export default function TeamManagementPage() {
           <div className="flex items-center justify-between mb-4">
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>{isKhmer ? 'ត្រឡប់ទៅផ្ទាំងគ្រូ (Dashboard)' : 'Back to Dashboard'}</span>
@@ -339,7 +374,7 @@ export default function TeamManagementPage() {
                 onClick={handleManualRefresh}
                 disabled={isRefreshing}
                 title={isKhmer ? 'ទាញទិន្នន័យឡើងវិញ' : 'Refresh Data'}
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <RefreshCw
                   className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`}
@@ -561,10 +596,10 @@ export default function TeamManagementPage() {
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleOpenEdit(m)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
-                              title={isKhmer ? 'កែសម្រួល' : 'Edit'}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                              title={isKhmer ? 'កែសម្រួលគណនី' : 'Edit Member'}
                             >
-                              <Users className="w-4 h-4" />
+                              <Edit2 className="w-4 h-4" />
                             </button>
                             {isSelf ? (
                               <span
@@ -580,10 +615,10 @@ export default function TeamManagementPage() {
                             ) : (
                               <button
                                 onClick={() => handleOpenDelete(m)}
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                                title={isKhmer ? 'លុប' : 'Delete'}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                                title={isKhmer ? 'លុបគណនី' : 'Delete Member'}
                               >
-                                <Users className="w-4 h-4 text-rose-500" />
+                                <Trash2 className="w-4 h-4 text-rose-500" />
                               </button>
                             )}
                           </div>
@@ -597,7 +632,7 @@ export default function TeamManagementPage() {
           </div>
         )}
 
-        {/* 2. Five Core Subject Sections */}
+        {/* 2. Five Core Subject Sections (Grouped Cleanly under respective subjects) */}
         <div className="space-y-6">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-amber-500" />

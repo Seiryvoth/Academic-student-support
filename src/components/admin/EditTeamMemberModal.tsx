@@ -14,10 +14,15 @@ import {
   AlertCircle,
   Save,
   KeyRound,
+  Crown,
 } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
 import { SUBJECTS, SubjectId } from '@/lib/curriculum-data';
-import { updateTeamMemberApi, SubjectTeamMember } from '@/lib/team-store';
+import {
+  updateTeamMemberApi,
+  SubjectTeamMember,
+  resolveSubjectCode,
+} from '@/lib/team-store';
 
 interface EditTeamMemberModalProps {
   isOpen: boolean;
@@ -39,21 +44,26 @@ export function EditTeamMemberModal({
   const [role, setRole] = useState<'super_admin' | 'subject_lead' | 'subject_member' | 'student'>(
     'subject_member'
   );
-  const [subjectId, setSubjectId] = useState<string>('math');
-  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [subjectId, setSubjectId] = useState<SubjectId>('math');
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Auto-populate / pre-fill the form with member's exact current information
   useEffect(() => {
     if (member && isOpen) {
-      setFullName(member.fullName);
-      setEmail(member.email);
-      setRole(member.role);
-      setSubjectId(member.assignedSubjectId || 'math');
-      setResetPasswordOpen(false);
+      setFullName(member.fullName || '');
+      setEmail(member.email || '');
+      setRole(member.role || 'subject_member');
+
+      const resolved =
+        resolveSubjectCode(member.assignedSubjectCode || member.assignedSubjectId) || 'math';
+      setSubjectId(resolved);
+
+      // Password left empty by default (only updates if explicitly typed in)
       setNewPassword('');
+      setShowPassword(false);
       setError(null);
     }
   }, [member, isOpen]);
@@ -81,7 +91,7 @@ export function EditTeamMemberModal({
       return;
     }
 
-    if (resetPasswordOpen && newPassword && newPassword.length < 6) {
+    if (newPassword && newPassword.trim().length > 0 && newPassword.trim().length < 6) {
       setError(
         isKhmer
           ? 'ពាក្យសម្ងាត់ថ្មីត្រូវមានយ៉ាងតិច ៦ តួអក្សរ'
@@ -100,7 +110,7 @@ export function EditTeamMemberModal({
         role: role,
         assigned_subject_id: role === 'super_admin' ? null : subjectId,
         subject_code: role === 'super_admin' ? undefined : subjectId,
-        password: resetPasswordOpen && newPassword ? newPassword : undefined,
+        password: newPassword && newPassword.trim().length >= 6 ? newPassword.trim() : undefined,
       });
 
       onSuccess(updated);
@@ -113,14 +123,16 @@ export function EditTeamMemberModal({
     }
   };
 
+  const currentSubjectMeta = subjectId ? SUBJECTS[subjectId] : null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
     >
-      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-        {/* Header */}
+      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+        {/* Modal Header */}
         <div className="relative px-6 pt-6 pb-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white shrink-0">
           <button
             onClick={onClose}
@@ -135,26 +147,35 @@ export function EditTeamMemberModal({
               <UserCheck className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white tracking-wide">
-                {isKhmer ? 'កែសម្រួលគណនីសមាជិក' : 'Edit Team Member Account'}
-              </h3>
-              <p className="text-xs text-white/80 mt-0.5 truncate max-w-xs">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-white tracking-wide">
+                  {isKhmer ? 'កែសម្រួលគណនីសមាជិក' : 'Edit Team Member Account'}
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30 uppercase">
+                  {member.role === 'super_admin'
+                    ? 'Super Admin'
+                    : member.role === 'subject_lead'
+                    ? 'Lead'
+                    : 'Member'}
+                </span>
+              </div>
+              <p className="text-xs text-white/80 mt-0.5 font-mono truncate max-w-xs">
                 {member.email}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Form Body (Scrollable if needed) */}
+        {/* Modal Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
           {error && (
-            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 flex items-start gap-2.5 text-rose-700 dark:text-rose-300 text-xs">
+            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 flex items-start gap-2.5 text-rose-700 dark:text-rose-300 text-xs animate-shake">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Full Name */}
+          {/* 1. Full Name */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               {isKhmer ? 'គោត្តនាម និងនាម' : 'Full Name'} <span className="text-rose-500">*</span>
@@ -165,16 +186,17 @@ export function EditTeamMemberModal({
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
+                placeholder={isKhmer ? 'ឧ. លោក សុខ វិសាល / Mr. Sok Visal' : 'e.g. Sok Visal'}
                 required
-                className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-medium"
               />
             </div>
           </div>
 
-          {/* Email Address */}
+          {/* 2. Email Address */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              {isKhmer ? 'អាសយដ្ឋានអ៊ីមែល' : 'Email Address'} <span className="text-rose-500">*</span>
+              {isKhmer ? 'អាសយដ្ឋានអ៊ីមែល MoEYS' : 'Email Address'} <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
@@ -182,13 +204,14 @@ export function EditTeamMemberModal({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                placeholder="member@moeys.gov.kh"
                 required
-                className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-mono"
               />
             </div>
           </div>
 
-          {/* Role and Subject row */}
+          {/* 3. Role and Subject Selection Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             {/* Role Selection */}
             <div>
@@ -216,7 +239,7 @@ export function EditTeamMemberModal({
               </select>
             </div>
 
-            {/* Subject Selection */}
+            {/* Assigned Subject */}
             {role !== 'super_admin' ? (
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -224,7 +247,7 @@ export function EditTeamMemberModal({
                 </label>
                 <select
                   value={subjectId}
-                  onChange={(e) => setSubjectId(e.target.value)}
+                  onChange={(e) => setSubjectId(e.target.value as SubjectId)}
                   className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                 >
                   {Object.values(SUBJECTS).map((s) => (
@@ -241,61 +264,56 @@ export function EditTeamMemberModal({
                 </label>
                 <div className="px-3 py-2.5 text-xs rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900 font-semibold flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5" />
-                  <span>{isKhmer ? 'គ្រប់គ្រងគ្រប់មុខវិជ្ជា' : 'Universal Access'}</span>
+                  <span>{isKhmer ? 'គ្រប់គ្រងគ្រប់មុខវិជ្ជា (Universal)' : 'Universal MoEYS Access'}</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Reset Password Accordion */}
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={() => setResetPasswordOpen(!resetPasswordOpen)}
-              className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-            >
-              <KeyRound className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>
-                {resetPasswordOpen
-                  ? isKhmer
-                    ? '▲ បិទការកំណត់ពាក្យសម្ងាត់ឡើងវិញ'
-                    : '▲ Cancel Password Reset'
-                  : isKhmer
-                  ? '▼ កំណត់ពាក្យសម្ងាត់ឡើងវិញ (Reset Password)'
-                  : '▼ Reset Password (Optional)'}
-              </span>
-            </button>
-
-            {resetPasswordOpen && (
-              <div className="mt-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 animate-in fade-in duration-150">
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  {isKhmer ? 'ពាក្យសម្ងាត់ថ្មី (យ៉ាងតិច ៦ តួអក្សរ)' : 'New Password (min 6 characters)'}
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder={isKhmer ? 'បញ្ចូលពាក្យសម្ងាត់ថ្មី...' : 'Enter new password...'}
-                    minLength={6}
-                    className="w-full pl-10 pr-10 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-2.5 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-500">
+          {/* 4. Reset Password Field (Optional - Left empty by default) */}
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                <KeyRound className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>
                   {isKhmer
-                    ? 'ទុកចោលទទេប្រសិនបើមិនចង់ផ្លាស់ប្តូរពាក្យសម្ងាត់'
-                    : 'Leave blank to keep existing password unchanged'}
-                </p>
-              </div>
-            )}
+                    ? 'កំណត់ពាក្យសម្ងាត់ថ្មី (ជាជម្រើស)'
+                    : 'New Password / Reset Password (Optional)'}
+                </span>
+              </label>
+              <span className="text-[10px] text-slate-400">
+                {isKhmer ? 'ទុកចោលទទេបើមិនប្តូរ' : 'Leave empty to keep current'}
+              </span>
+            </div>
+
+            <div className="relative">
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder={
+                  isKhmer
+                    ? '•••••••• (បញ្ចូលតែពេលចង់ផ្លាស់ប្តូរពាក្យសម្ងាត់)'
+                    : '•••••••• (Only enter if changing password)'
+                }
+                minLength={6}
+                className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                aria-label="Toggle password visibility"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {isKhmer
+                ? 'ប្រសិនបើទុកទទេ ប្រព័ន្ធនឹងរក្សាទុកពាក្យសម្ងាត់ចាស់ដដែល។ ប្រសិនបើបញ្ចូល ត្រូវមានយ៉ាងតិច ៦ តួអក្សរ។'
+                : 'Left empty by default; only updates Supabase Auth password if filled in (min 6 characters).'}
+            </p>
           </div>
 
           {/* Action Buttons */}
@@ -304,7 +322,7 @@ export function EditTeamMemberModal({
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
               {isKhmer ? 'បោះបង់' : 'Cancel'}
             </button>

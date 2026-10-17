@@ -10,6 +10,9 @@ export interface SubjectTeamMember {
   fullName: string;
   role: 'super_admin' | 'subject_lead' | 'subject_member' | 'student';
   assignedSubjectId: SubjectId | string | null;
+  assignedSubjectCode?: SubjectId | null;
+  subjectNameKm?: string;
+  subjectNameEn?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -23,6 +26,44 @@ export interface SubjectInfo {
 
 const STORAGE_KEY_TEAM_MEMBERS = 'moeys_subject_team_members_v1';
 
+// Deterministic UUIDs to MoEYS Subject Code mapping
+const UUID_TO_SUBJECT: Record<string, SubjectId> = {
+  'a0000000-0000-0000-0000-000000000001': 'math',
+  'a0000000-0000-0000-0000-000000000002': 'physics',
+  'a0000000-0000-0000-0000-000000000003': 'chemistry',
+  'a0000000-0000-0000-0000-000000000004': 'biology',
+  'a0000000-0000-0000-0000-000000000005': 'english',
+};
+
+/**
+ * Universal Subject Code Resolver:
+ * Accepts a Subject code ('math'), UUID, or null, and returns the canonical SubjectId.
+ */
+export function resolveSubjectCode(
+  subjectRef: string | null | undefined,
+  subjectsList?: SubjectInfo[]
+): SubjectId | null {
+  if (!subjectRef) return null;
+  const lower = subjectRef.toLowerCase();
+
+  if (['math', 'physics', 'chemistry', 'biology', 'english'].includes(lower)) {
+    return lower as SubjectId;
+  }
+
+  if (UUID_TO_SUBJECT[lower]) {
+    return UUID_TO_SUBJECT[lower];
+  }
+
+  if (subjectsList && subjectsList.length > 0) {
+    const found = subjectsList.find(
+      (s) => s.id.toLowerCase() === lower || s.code.toLowerCase() === lower
+    );
+    if (found) return found.code;
+  }
+
+  return null;
+}
+
 // Initial pre-seeded team members matching the official MoEYS curriculum department structure
 export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
   {
@@ -31,6 +72,7 @@ export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
     fullName: 'លោកបណ្ឌិត ជា សុវណ្ណ (Dr. Chea Sovann)',
     role: 'super_admin',
     assignedSubjectId: null,
+    assignedSubjectCode: null,
     createdAt: '2026-01-01T00:00:00Z',
   },
   {
@@ -39,6 +81,9 @@ export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
     fullName: 'សាស្ត្រាចារ្យ ឡុង សុខា (Prof. Long Sokha)',
     role: 'subject_lead',
     assignedSubjectId: 'math',
+    assignedSubjectCode: 'math',
+    subjectNameKm: 'គណិតវិទ្យា',
+    subjectNameEn: 'Mathematics',
     createdAt: '2026-01-01T00:00:00Z',
   },
   {
@@ -47,6 +92,9 @@ export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
     fullName: 'អ្នកគ្រូ ចាន់ ស្រីមុំ (Ms. Chan Sreymom)',
     role: 'subject_member',
     assignedSubjectId: 'math',
+    assignedSubjectCode: 'math',
+    subjectNameKm: 'គណិតវិទ្យា',
+    subjectNameEn: 'Mathematics',
     createdAt: '2026-01-15T08:30:00Z',
   },
   {
@@ -55,6 +103,9 @@ export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
     fullName: 'លោកស្រី គឹម សុផល (Mrs. Kim Sophal)',
     role: 'subject_lead',
     assignedSubjectId: 'physics',
+    assignedSubjectCode: 'physics',
+    subjectNameKm: 'រូបវិទ្យា',
+    subjectNameEn: 'Physics',
     createdAt: '2026-01-01T00:00:00Z',
   },
   {
@@ -63,6 +114,9 @@ export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
     fullName: 'លោក ហេង វុទ្ធី (Mr. Heng Vuthy)',
     role: 'subject_member',
     assignedSubjectId: 'physics',
+    assignedSubjectCode: 'physics',
+    subjectNameKm: 'រូបវិទ្យា',
+    subjectNameEn: 'Physics',
     createdAt: '2026-01-20T09:00:00Z',
   },
   {
@@ -71,6 +125,9 @@ export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
     fullName: 'លោក វ៉ាន់ រតនា (Mr. Vann Rattana)',
     role: 'subject_lead',
     assignedSubjectId: 'chemistry',
+    assignedSubjectCode: 'chemistry',
+    subjectNameKm: 'គីមីវិទ្យា',
+    subjectNameEn: 'Chemistry',
     createdAt: '2026-01-01T00:00:00Z',
   },
   {
@@ -79,6 +136,9 @@ export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
     fullName: 'លោកស្រី សេង គន្ធា (Mrs. Seng Kunthea)',
     role: 'subject_lead',
     assignedSubjectId: 'biology',
+    assignedSubjectCode: 'biology',
+    subjectNameKm: 'ជីវវិទ្យា',
+    subjectNameEn: 'Biology',
     createdAt: '2026-01-01T00:00:00Z',
   },
   {
@@ -87,6 +147,9 @@ export const INITIAL_TEAM_MEMBERS: SubjectTeamMember[] = [
     fullName: 'លោក ដារ៉ា សិទ្ធិ (Mr. Dara Sethi)',
     role: 'subject_lead',
     assignedSubjectId: 'english',
+    assignedSubjectCode: 'english',
+    subjectNameKm: 'ភាសាអង់គ្លេស',
+    subjectNameEn: 'English',
     createdAt: '2026-01-01T00:00:00Z',
   },
 ];
@@ -103,7 +166,13 @@ export function getStoredTeamMembers(): SubjectTeamMember[] {
       return INITIAL_TEAM_MEMBERS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_TEAM_MEMBERS;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.map((m: SubjectTeamMember) => ({
+        ...m,
+        assignedSubjectCode: m.assignedSubjectCode || resolveSubjectCode(m.assignedSubjectId),
+      }));
+    }
+    return INITIAL_TEAM_MEMBERS;
   } catch {
     return INITIAL_TEAM_MEMBERS;
   }
@@ -115,11 +184,16 @@ export function getStoredTeamMembers(): SubjectTeamMember[] {
 export function saveStoredTeamMembers(members: SubjectTeamMember[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY_TEAM_MEMBERS, JSON.stringify(members));
+    const enriched = members.map((m) => ({
+      ...m,
+      assignedSubjectCode: m.assignedSubjectCode || resolveSubjectCode(m.assignedSubjectId),
+    }));
+
+    localStorage.setItem(STORAGE_KEY_TEAM_MEMBERS, JSON.stringify(enriched));
 
     // Synchronize with general staff accounts store so dashboard reflects changes
-    const staffAccounts: StaffAccount[] = members.map((m) => {
-      const subjectAssigned = (m.assignedSubjectId as SubjectId) || null;
+    const staffAccounts: StaffAccount[] = enriched.map((m) => {
+      const subjectAssigned = m.assignedSubjectCode || (m.assignedSubjectId as SubjectId) || null;
       return {
         id: m.id,
         email: m.email,
@@ -185,18 +259,29 @@ export async function fetchTeamFromApi(): Promise<{
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.users) && data.users.length > 0) {
-        const mappedUsers: SubjectTeamMember[] = data.users.map((u: any) => ({
-          id: u.id || u.user_id,
-          email: u.email,
-          fullName: u.full_name || u.email,
-          role: u.role,
-          assignedSubjectId: u.assigned_subject_id || u.subject_assigned || null,
-          createdAt: u.created_at || new Date().toISOString(),
-          updatedAt: u.updated_at,
-        }));
+        const subjects: SubjectInfo[] = data.subjects || [];
+        const mappedUsers: SubjectTeamMember[] = data.users.map((u: any) => {
+          const rawSubj = u.assigned_subject_id || u.subject_assigned || null;
+          const subjCode =
+            u.assigned_subject_code || resolveSubjectCode(rawSubj, subjects);
+
+          return {
+            id: u.id || u.user_id,
+            email: u.email,
+            fullName: u.full_name || u.email,
+            role: u.role,
+            assignedSubjectId: rawSubj,
+            assignedSubjectCode: subjCode,
+            subjectNameKm: u.subject_name_km,
+            subjectNameEn: u.subject_name_en,
+            createdAt: u.created_at || new Date().toISOString(),
+            updatedAt: u.updated_at,
+          };
+        });
+
         // Update local cache
         saveStoredTeamMembers(mappedUsers);
-        return { users: mappedUsers, subjects: data.subjects || [] };
+        return { users: mappedUsers, subjects };
       }
     }
   } catch (err) {
@@ -207,6 +292,54 @@ export async function fetchTeamFromApi(): Promise<{
     users: getStoredTeamMembers(),
     subjects: [],
   };
+}
+
+/**
+ * Fetches a single team member profile by ID from backend API
+ */
+export async function fetchTeamMemberByIdApi(userId: string): Promise<SubjectTeamMember | null> {
+  try {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`/api/admin/users?user_id=${encodeURIComponent(userId)}`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.user) {
+        const u = data.user;
+        const rawSubj = u.assigned_subject_id || u.subject_assigned || null;
+        const subjCode =
+          u.assigned_subject_code || resolveSubjectCode(rawSubj, data.subjects);
+
+        const member: SubjectTeamMember = {
+          id: u.id || u.user_id,
+          email: u.email,
+          fullName: u.full_name || u.email,
+          role: u.role,
+          assignedSubjectId: rawSubj,
+          assignedSubjectCode: subjCode,
+          subjectNameKm: u.subject_name_km,
+          subjectNameEn: u.subject_name_en,
+          createdAt: u.created_at || new Date().toISOString(),
+          updatedAt: u.updated_at,
+        };
+
+        // Update local member instance
+        const current = getStoredTeamMembers();
+        const updated = current.map((m) => (m.id === userId ? member : m));
+        saveStoredTeamMembers(updated);
+
+        return member;
+      }
+    }
+  } catch (err) {
+    console.warn('API fetch member by id error:', err);
+  }
+
+  const current = getStoredTeamMembers();
+  return current.find((m) => m.id === userId) || null;
 }
 
 /**
@@ -234,20 +367,27 @@ export async function createTeamMemberApi(payload: {
 
   const resData = await res.json();
   const u = resData.user || {};
+  const rawSubj = u.assigned_subject_id || payload.assigned_subject_id || null;
+  const subjCode =
+    u.assigned_subject_code || (payload.subject_code as SubjectId) || resolveSubjectCode(rawSubj);
 
   const newMember: SubjectTeamMember = {
     id: u.id || `staff-${Date.now()}`,
     email: payload.email,
     fullName: payload.full_name,
     role: payload.role,
-    assignedSubjectId: payload.assigned_subject_id || payload.subject_code || null,
+    assignedSubjectId: rawSubj,
+    assignedSubjectCode: subjCode,
     createdAt: u.created_at || new Date().toISOString(),
     updatedAt: u.updated_at,
   };
 
   // Optimistic local state update
   const current = getStoredTeamMembers();
-  const updated = [newMember, ...current.filter((m) => m.email.toLowerCase() !== newMember.email.toLowerCase())];
+  const updated = [
+    newMember,
+    ...current.filter((m) => m.email.toLowerCase() !== newMember.email.toLowerCase()),
+  ];
   saveStoredTeamMembers(updated);
 
   return newMember;
@@ -277,19 +417,32 @@ export async function updateTeamMemberApi(payload: {
     throw new Error(errData.error || `Failed to update member (${res.status})`);
   }
 
+  const resData = await res.json();
+  const u = resData.user || {};
+
   const current = getStoredTeamMembers();
   const existing = current.find((m) => m.id === payload.user_id);
 
+  const rawSubj =
+    payload.assigned_subject_id !== undefined
+      ? payload.assigned_subject_id
+      : u.assigned_subject_id || existing?.assignedSubjectId || null;
+
+  const subjCode =
+    (payload.subject_code as SubjectId) ||
+    u.assigned_subject_code ||
+    resolveSubjectCode(rawSubj) ||
+    existing?.assignedSubjectCode ||
+    null;
+
   const updatedMember: SubjectTeamMember = {
     id: payload.user_id,
-    email: payload.email || existing?.email || '',
-    fullName: payload.full_name || existing?.fullName || '',
-    role: payload.role || existing?.role || 'subject_member',
-    assignedSubjectId:
-      payload.assigned_subject_id !== undefined
-        ? payload.assigned_subject_id
-        : existing?.assignedSubjectId || null,
-    createdAt: existing?.createdAt || new Date().toISOString(),
+    email: payload.email || u.email || existing?.email || '',
+    fullName: payload.full_name || u.full_name || existing?.fullName || '',
+    role: payload.role || u.role || existing?.role || 'subject_member',
+    assignedSubjectId: rawSubj,
+    assignedSubjectCode: payload.role === 'super_admin' ? null : subjCode,
+    createdAt: existing?.createdAt || u.created_at || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 
